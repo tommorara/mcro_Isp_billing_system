@@ -1,0 +1,12 @@
+universal_billing/
+├── companies/
+│   ├── management/
+│   │   ├── commands/
+│   │   │   ├── create_tenant.py
+│   ├── tests/
+│   │   ├── models/
+│   │   │   ├── test_company.py
+├── docs/
+│   ├── postgres.md  # Windows and Ubuntu PostgreSQL guide
+├── requirements.txt  # Minimal dependencies
+├── .env  # Simple config

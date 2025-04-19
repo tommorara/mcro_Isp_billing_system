@@ -1,0 +1,36 @@
+universal_billing/
+├── .env
+├── requirements.txt
+├── docs/
+│   ├── postgres.md
+├── universal_billing/
+│   ├── __init__.py
+│   ├── settings.py
+│   ├── urls.py
+│   ├── wsgi.py
+├── companies/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── middleware.py
+│   ├── tenants.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── serializers.py
+│   ├── views.py
+│   ├── management/
+│   │   ├── __init__.py
+│   │   ├── commands/
+│   │   │   ├── __init__.py
+│   │   │   ├── create_company_tenant.py
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── test_company.py
+├── customers/  # New
+│   ├── __init__.py
+│   ├── models.py
+│   ├── admin.py
+│   ├── apps.py
+│   ├── migrations/
+│   │   ├── __init__.py
