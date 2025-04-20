@@ -1,43 +1,50 @@
-C:\Users\Kim\Documents\universal_billing\
-├── .env
-├── requirements.txt
-├── logs\
-│   ├── django.log
-├── universal_billing\
-│   ├── settings.py
-│   ├── urls.py
-├── companies\
-│   ├── admin.py
+universal_billing/
+├── companies/
+│   ├── __init__.py
 │   ├── models.py
-├── customers\
+│   ├── admin.py
+│   └── migrations/
+├── customers/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── views.py
+│   ├── urls.py
+│   ├── tasks.py
 │   ├── admin.py
 │   ├── api.py
-│   ├── models.py
-│   ├── serializers.py
-│   ├── tasks.py
-│   ├── urls.py
-│   ├── views.py
-│   ├── templates\customers\
-│   │   ├── login.html
-│   │   ├── dashboard.html
-│   │   ├── packages.html
-│   │   ├── renew.html
-│   │   ├── invoices.html
-│   │   ├── profile.html
-├── payments\
+│   └── templates/customers/
+│       ├── login.html
+│       ├── dashboard.html
+│       ├── profile.html
+│       ├── packages.html
+│       ├── plans.html
+│       ├── invoices.html
+│       ├── notifications.html
+│       ├── support.html
+│       ├── renew.html
+│       ├── recharge.html
+│       ├── redeem_voucher.html
+│       └── hotspot_payment.html
+├── payments/
 │   ├── __init__.py
-│   ├── admin.py
-│   ├── apps.py
-│   ├── migrations\
 │   ├── models.py
-│   ├── tasks.py
-│   ├── urls.py
+│   ├── mpesa.py
 │   ├── views.py
-├── static\
-│   ├── css\
-│   │   ├── style.css
-├── staticfiles\
-├── templates\
-    ├── admin\
-    │   ├── base_site.html
-    ├── base.html
+│   └── urls.py
+├── templates/
+│   └── base.html
+├── static/
+├── logs/
+├── universal_billing/
+│   ├── __init__.py
+│   ├── settings.py
+│   ├── urls.py
+│   ├── wsgi.py
+│   └── celery.py
+├── manage.py
+├── .env
+└── requirements.txt
+MikroTik Hotspot Files:
+├── hotspot_login.html
+├── hotspot.css
+└── hotspot.js

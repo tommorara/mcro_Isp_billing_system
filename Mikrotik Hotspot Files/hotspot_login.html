@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISP One Hotspot</title>
+    <link rel="stylesheet" href="/hotspot.css">
+</head>
+<body>
+    <div class="container">
+        <h1>ISP One Hotspot</h1>
+        <p>Enter your phone number and select a plan to connect.</p>
+        <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" placeholder="+254123456789" required>
+        </div>
+        <div id="packages" class="packages"></div>
+        <div id="payment-status" class="payment-status" style="display: none;"></div>
+        <p>Have a voucher? <a href="https://yourdomain.com/customer/redeem_voucher/">Redeem here</a>.</p>
+        <p>Monitor usage? <a href="https://yourdomain.com/customer/login/">Login</a>.</p>
+    </div>
+    <form id="hotspotLoginForm" method="post" action="/login" style="display: none;">
+        <input type="hidden" name="username" id="loginUsername">
+        <input type="hidden" name="password" id="loginPassword">
+    </form>
+    <script src="/hotspot.js"></script>
+</body>
+</html>

@@ -1,14 +1,19 @@
 {% extends 'base.html' %}
-{% block title %}Invoices{% endblock %}
+{% block title %}Your Invoices{% endblock %}
 {% block content %}
 <div class="container mt-5">
     <h2>Your Invoices</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
     {% if invoices %}
         <table class="table">
             <thead>
                 <tr>
                     <th>Invoice ID</th>
-                    <th>Subscription</th>
+                    <th>Package</th>
                     <th>Amount</th>
                     <th>Issued Date</th>
                     <th>Status</th>
@@ -29,6 +34,6 @@
     {% else %}
         <p>No invoices found.</p>
     {% endif %}
-    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary mt-3">Back to Dashboard</a>
 </div>
 {% endblock %}

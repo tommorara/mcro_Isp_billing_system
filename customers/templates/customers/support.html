@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Support{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Support</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    <h3>Send a Support Message</h3>
+    <form method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="subject" class="form-label">Subject</label>
+            <input type="text" class="form-control" id="subject" name="subject" required>
+        </div>
+        <div class="mb-3">
+            <label for="message" class="form-label">Message</label>
+            <textarea class="form-control" id="message" name="message" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Send</button>
+    </form>
+    <h3>Your Support Messages</h3>
+    {% if messages %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Message</th>
+                    <th>Date</th>
+                    <th>From</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for msg in messages %}
+                <tr>
+                    <td>{{ msg.subject }}</td>
+                    <td>{{ msg.message }}</td>
+                    <td>{{ msg.created_at|date:"Y-m-d" }}</td>
+                    <td>{% if msg.is_admin_reply %}Admin{% else %}You{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No support messages found.</p>
+    {% endif %}
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary mt-3">Back to Dashboard</a>
+</div>
+{% endblock %}

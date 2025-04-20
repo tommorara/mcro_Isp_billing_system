@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}Hotspot Payment{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Hotspot Payment</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    
+    {% if selected_package %}
+        <h3>Confirm Purchase</h3>
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">{{ selected_package.name }}</h5>
+                <p class="card-text">
+                    <strong>Speed:</strong> {{ selected_package.download_bandwidth }}Mbps ↓ / {{ selected_package.upload_bandwidth }}Mbps ↑<br>
+                    <strong>Users:</strong> {{ selected_package.get_shared_users_display }}<br>
+                    <strong>Duration:</strong> 
+                    {% if selected_package.duration_minutes %}
+                        {{ selected_package.duration_minutes }} minutes
+                    {% elif selected_package.duration_hours %}
+                        {{ selected_package.duration_hours }} hours
+                    {% else %}
+                        {{ selected_package.duration_days }} days
+                    {% endif %}<br>
+                    <strong>Price:</strong> KSH {{ selected_package.price }}<br>
+                    <strong>Phone:</strong> {{ phone }}
+                </p>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="package_id" value="{{ selected_package.id }}">
+                    <input type="hidden" name="phone" value="{{ phone }}">
+                    <button type="submit" class="btn btn-primary">Confirm Payment</button>
+                </form>
+            </div>
+        </div>
+    {% else %}
+        <h3>Choose a Hotspot Package</h3>
+        {% if packages %}
+            <div class="row">
+                {% for package in packages %}
+                <div class="col-md-4">
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h5 class="card-title">{{ package.name }}</h5>
+                            <p class="card-text">
+                                <strong>Speed:</strong> {{ package.download_bandwidth }}Mbps ↓ / {{ package.upload_bandwidth }}Mbps ↑<br>
+                                <strong>Users:</strong> {{ package.get_shared_users_display }}<br>
+                                <strong>Duration:</strong> 
+                                {% if package.duration_minutes %}
+                                    {{ package.duration_minutes }} minutes
+                                {% elif package.duration_hours %}
+                                    {{ package.duration_hours }} hours
+                                {% else %}
+                                    {{ package.duration_days }} days
+                                {% endif %}<br>
+                                <strong>Price:</strong> KSH {{ package.price }}
+                            </p>
+                            <a href="{% url 'hotspot_login' %}?package_id={{ package.id }}&phone={{ phone|default:'' }}" class="btn btn-primary">Buy Now</a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info">No Hotspot packages available.</div>
+        {% endif %}
+    {% endif %}
+    
+    <a href="{% url 'redeem_voucher' %}" class="btn btn-secondary mt-3">Redeem Voucher</a>
+    <a href="{% url 'customer_login' %}" class="btn btn-secondary mt-3">Customer Portal</a>
+</div>
+{% endblock %}

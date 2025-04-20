@@ -91,6 +91,8 @@ DATABASES = {
 }
 
 
+
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -195,3 +197,4 @@ SESSION_COOKIE_AGE = 1209600  # 2 weeks
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True  # Restrict in production
+#SESSION_ENGINE = 'django.contrib.sessions.backends.db'

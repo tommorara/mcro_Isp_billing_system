@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %}Redeem Voucher{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Redeem Voucher</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="code" class="form-label">Voucher Code</label>
+            <input type="text" class="form-control" id="code" name="code" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Redeem</button>
+    </form>
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary mt-3">Back to Dashboard</a>
+</div>
+{% endblock %}

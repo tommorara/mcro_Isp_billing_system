@@ -23,15 +23,14 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
-from django.shortcuts import redirect
-
-def redirect_to_admin(request):
-    return redirect('admin:index')
+from django.conf import settings
+from django.conf.urls.static import static
+from customers.views import hotspot_plans_api, hotspot_pay_api
 
 urlpatterns = [
-    path('', redirect_to_admin, name='home'),
     path('admin/', admin.site.urls),
-    path('api/', include('rest_framework.urls')),
     path('customer/', include('customers.urls')),
     path('payments/', include('payments.urls')),
-]
+    path('api/hotspot/plans/', hotspot_plans_api, name='hotspot_plans_api'),
+    path('api/hotspot/pay/', hotspot_pay_api, name='hotspot_pay_api'),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

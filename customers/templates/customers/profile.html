@@ -1,13 +1,14 @@
 {% extends 'base.html' %}
-{% block title %}Profile{% endblock %}
+{% block title %}Customer Profile{% endblock %}
 {% block content %}
 <div class="container mt-5">
-    <h2>Your Profile</h2>
+    <h2>Profile</h2>
     {% if messages %}
         {% for message in messages %}
             <div class="alert alert-{{ message.tags }}">{{ message }}</div>
         {% endfor %}
     {% endif %}
+    
     <form method="post">
         {% csrf_token %}
         <div class="mb-3">
@@ -20,18 +21,30 @@
         </div>
         <div class="mb-3">
             <label for="phone" class="form-label">Phone</label>
-            <input type="text" class="form-control" id="phone" name="phone" value="{{ customer.phone }}" required>
+            <input type="tel" class="form-control" id="phone" name="phone" value="{{ customer.phone }}" required>
         </div>
         <div class="mb-3">
             <label for="address" class="form-label">Address</label>
             <textarea class="form-control" id="address" name="address">{{ customer.address }}</textarea>
         </div>
         <div class="mb-3">
-            <label for="password" class="form-label">New Password (leave blank to keep current)</label>
+            <label for="password" class="form-label">New Password (optional)</label>
             <input type="password" class="form-control" id="password" name="password">
         </div>
         <button type="submit" class="btn btn-primary">Update Profile</button>
     </form>
+    
+    <h3>Compensations</h3>
+    {% if compensations %}
+        <ul class="list-group">
+            {% for comp in compensations %}
+            <li class="list-group-item">{{ comp.reason }} - {{ comp.created_at|date:"Y-m-d" }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No compensations.</p>
+    {% endif %}
+    
     <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary mt-3">Back to Dashboard</a>
 </div>
 {% endblock %}

@@ -3,64 +3,83 @@
 {% block content %}
 <div class="container mt-5">
     <h2>Welcome, {{ customer.name }}</h2>
-    {% if notifications %}
-        <a href="{% url 'customer_notifications' %}" class="btn btn-info mb-3">
-            Notifications <span class="badge bg-danger">{{ notifications.count }}</span>
-        </a>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
     {% endif %}
-    {% if recommendations %}
-        <h3>Recommended Plans</h3>
-        <div class="row">
-            {% for package in recommendations %}
-            <div class="col-md-4">
-                <div class="card mb-4">
-                    <div class="card-body">
-                        <h5 class="card-title">{{ package.name }}</h5>
-                        <p class="card-text">Type: {{ package.connection_type }}</p>
-                        <p class="card-text">Speed: {{ package.speed }}</p>
-                        <p class="card-text">Price: KSH {{ package.price }}</p>
-                        <p class="card-text">Duration: {% if package.duration_hours %}{{ package.duration_hours }} hours{% else %}{{ package.duration_days }} days{% endif %}</p>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    {% endif %}
-    <h3>Your Active Plans</h3>
+    
+    <h3>Your Subscriptions</h3>
     {% if subscriptions %}
         <table class="table">
             <thead>
                 <tr>
                     <th>Package</th>
-                    <th>Connection Type</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
                     <th>Status</th>
-                    <th>Action</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for sub in subscriptions %}
                 <tr>
                     <td>{{ sub.package.name }}</td>
-                    <td>{{ sub.connection_type }}</td>
-                    <td>{{ sub.is_active|yesno:"Active,Inactive" }}</td>
+                    <td>{{ sub.start_date|date:"Y-m-d H:i" }}</td>
+                    <td>{{ sub.end_date|date:"Y-m-d H:i" }}</td>
+                    <td>{{ sub.is_active|yesno:"Active,Expired" }}</td>
                     <td>
                         <a href="{% url 'customer_renew' sub.id %}" class="btn btn-sm btn-primary">Renew</a>
+                        <a href="{% url 'recharge_subscription' sub.id %}" class="btn btn-sm btn-secondary">Recharge</a>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p>No active plans found.</p>
+        <p>No subscriptions found.</p>
     {% endif %}
-    <a href="{% url 'customer_plans' %}" class="btn btn-secondary">View All Plans</a>
-    <a href="{% url 'customer_packages' %}?connection_type=HOTSPOT" class="btn btn-secondary">Hotspot Packages</a>
-    <a href="{% url 'customer_packages' %}?connection_type=PPPOE" class="btn btn-secondary">PPPoE Packages</a>
-    <a href="{% url 'customer_packages' %}?connection_type=STATIC" class="btn btn-secondary">Static Packages</a>
-    <a href="{% url 'customer_packages' %}?connection_type=VPN" class="btn btn-secondary">VPN Packages</a>
-    <a href="{% url 'customer_invoices' %}" class="btn btn-secondary">View Invoices</a>
-    <a href="{% url 'customer_notifications' %}" class="btn btn-secondary">View Notifications</a>
-    <a href="{% url 'customer_profile' %}" class="btn btn-secondary">Profile</a>
-    <a href="{% url 'customer_logout' %}" class="btn btn-danger">Logout</a>
+    
+    <h3>Recent Invoices</h3>
+    {% if invoices %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Issued Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td>{{ invoice.id }}</td>
+                    <td>KSH {{ invoice.amount }}</td>
+                    <td>{{ invoice.status }}</td>
+                    <td>{{ invoice.issued_date|date:"Y-m-d H:i" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No invoices found.</p>
+    {% endif %}
+    
+    <h3>Notifications</h3>
+    {% if notifications %}
+        <ul class="list-group">
+            {% for notification in notifications %}
+            <li class="list-group-item">{{ notification.subject }} - {{ notification.created_at|date:"Y-m-d H:i" }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No notifications.</p>
+    {% endif %}
+    
+    <a href="{% url 'customer_profile' %}" class="btn btn-primary mt-3">Profile</a>
+    <a href="{% url 'customer_packages' %}" class="btn btn-primary mt-3">Packages</a>
+    <a href="{% url 'customer_support' %}" class="btn btn-primary mt-3">Support</a>
+    <a href="{% url 'customer_logout' %}" class="btn btn-secondary mt-3">Logout</a>
 </div>
 {% endblock %}

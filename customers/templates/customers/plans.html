@@ -3,21 +3,22 @@
 {% block content %}
 <div class="container mt-5">
     <h2>Your Plans</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    
     {% if subscriptions %}
-        <table class="table">
+        <table class="table table-striped">
             <thead>
                 <tr>
                     <th>Package</th>
                     <th>Connection Type</th>
-                    <th>Speed</th>
-                    <th>Price</th>
-                    <th>Duration</th>
-                    <th>Username</th>
                     <th>Start Date</th>
                     <th>End Date</th>
                     <th>Status</th>
-                    <th>VPN Server</th>
-                    <th>Action</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -25,24 +26,22 @@
                 <tr>
                     <td>{{ sub.package.name }}</td>
                     <td>{{ sub.connection_type }}</td>
-                    <td>{{ sub.package.speed }}</td>
-                    <td>KSH {{ sub.package.price }}</td>
-                    <td>{% if sub.package.duration_hours %}{{ sub.package.duration_hours }} hours{% else %}{{ sub.package.duration_days }} days{% endif %}</td>
-                    <td>{{ sub.username }}</td>
-                    <td>{{ sub.start_date|date:"Y-m-d" }}</td>
-                    <td>{{ sub.end_date|date:"Y-m-d" }}</td>
-                    <td>{{ sub.is_active|yesno:"Active,Inactive" }}</td>
-                    <td>{% if sub.connection_type|slice:":4" == "VPN_" and sub.router.vpn_server %}{{ sub.router.vpn_server }}{% else %}N/A{% endif %}</td>
+                    <td>{{ sub.start_date|date:"Y-m-d H:i" }}</td>
+                    <td>{{ sub.end_date|date:"Y-m-d H:i" }}</td>
+                    <td>{{ sub.is_active|yesno:"Active,Expired" }}</td>
                     <td>
                         <a href="{% url 'customer_renew' sub.id %}" class="btn btn-sm btn-primary">Renew</a>
+                        <a href="{% url 'recharge_subscription' sub.id %}" class="btn btn-sm btn-secondary">Recharge</a>
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     {% else %}
-        <p>No plans found.</p>
+        <div class="alert alert-info">No subscriptions found. <a href="{% url 'customer_packages' %}">Browse packages</a>.</div>
     {% endif %}
-    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+    
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary mt-3">Back to Dashboard</a>
+    <a href="{% url 'customer_packages' %}" class="btn btn-primary mt-3">View Packages</a>
 </div>
 {% endblock %}

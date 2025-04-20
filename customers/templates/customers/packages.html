@@ -1,14 +1,8 @@
 {% extends 'base.html' %}
-{% block title %}{{ connection_type }} Packages{% endblock %}
+{% block title %}Packages{% endblock %}
 {% block content %}
 <div class="container mt-5">
-    <h2>{{ connection_type }} Packages</h2>
-    <div class="mb-3">
-        <a href="{% url 'customer_packages' %}?connection_type=HOTSPOT" class="btn btn-outline-secondary">Hotspot</a>
-        <a href="{% url 'customer_packages' %}?connection_type=PPPOE" class="btn btn-outline-secondary">PPPoE</a>
-        <a href="{% url 'customer_packages' %}?connection_type=STATIC" class="btn btn-outline-secondary">Static</a>
-        <a href="{% url 'customer_packages' %}?connection_type=VPN" class="btn btn-outline-secondary">VPN</a>
-    </div>
+    <h2>Available Packages</h2>
     {% if packages %}
         <div class="row">
             {% for package in packages %}
@@ -16,17 +10,28 @@
                 <div class="card mb-4">
                     <div class="card-body">
                         <h5 class="card-title">{{ package.name }}</h5>
-                        <p class="card-text">Speed: {{ package.speed }}</p>
-                        <p class="card-text">Price: KSH {{ package.price }}</p>
-                        <p class="card-text">Duration: {% if package.duration_hours %}{{ package.duration_hours }} hours{% else %}{{ package.duration_days }} days{% endif %}</p>
+                        <p class="card-text">
+                            <strong>Type:</strong> {{ package.connection_type }}<br>
+                            <strong>Speed:</strong> {{ package.download_bandwidth }}Mbps ↓ / {{ package.upload_bandwidth }}Mbps ↑<br>
+                            <strong>Users:</strong> {{ package.get_shared_users_display }}<br>
+                            <strong>Duration:</strong> 
+                            {% if package.duration_minutes %}
+                                {{ package.duration_minutes }} minutes
+                            {% elif package.duration_hours %}
+                                {{ package.duration_hours }} hours
+                            {% else %}
+                                {{ package.duration_days }} days
+                            {% endif %}<br>
+                            <strong>Price:</strong> KSH {{ package.price }}
+                        </p>
                     </div>
                 </div>
             </div>
             {% endfor %}
         </div>
     {% else %}
-        <p>No {{ connection_type }} packages available.</p>
+        <p>No packages available.</p>
     {% endif %}
-    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary mt-3">Back to Dashboard</a>
 </div>
 {% endblock %}

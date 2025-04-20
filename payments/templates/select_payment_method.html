@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+{% block title %}Select Payment Method{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Pay Invoice #{{ invoice.id }}</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">Invoice Details</h5>
+            <p class="card-text">
+                <strong>Amount:</strong> KSH {{ invoice.amount }}<br>
+                <strong>Issued:</strong> {{ invoice.issued_date|date:"Y-m-d H:i" }}<br>
+                <strong>Status:</strong> {{ invoice.status }}
+            </p>
+        </div>
+    </div>
+    
+    <h3>Select Payment Method</h3>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label class="form-label">Payment Method</label>
+            <select name="payment_method" class="form-control" id="payment_method" onchange="toggleProofField()">
+                <option value="MPESA">M-Pesa (Default)</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="CASH">Cash</option>
+            </select>
+        </div>
+        <div class="mb-3" id="proof_file_field" style="display: none;">
+            <label for="proof_file" class="form-label">Upload Proof of Payment (PDF/Image)</label>
+            <input type="file" class="form-control" id="proof_file" name="proof_file" accept=".pdf,.jpg,.jpeg,.png">
+        </div>
+        <button type="submit" class="btn btn-primary">Proceed with Payment</button>
+    </form>
+    
+    <a href="{% url 'customer_invoices' %}" class="btn btn-secondary mt-3">Back to Invoices</a>
+    
+    <script>
+        function toggleProofField() {
+            var paymentMethod = document.getElementById('payment_method').value;
+            var proofField = document.getElementById('proof_file_field');
+            proofField.style.display = paymentMethod === 'BANK_TRANSFER' ? 'block' : 'none';
+        }
+    </script>
+</div>
+{% endblock %}
