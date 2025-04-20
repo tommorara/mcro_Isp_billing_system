@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block title %}Notifications{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Your Notifications</h2>
+    {% if notifications %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Message</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for notification in notifications %}
+                <tr>
+                    <td>{{ notification.subject }}</td>
+                    <td>{{ notification.message }}</td>
+                    <td>{{ notification.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>{{ notification.is_read|yesno:"Read,Unread" }}</td>
+                    <td>
+                        {% if not notification.is_read %}
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="notification_id" value="{{ notification.id }}">
+                            <button type="submit" class="btn btn-sm btn-primary">Mark as Read</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No notifications found.</p>
+    {% endif %}
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+</div>
+{% endblock %}

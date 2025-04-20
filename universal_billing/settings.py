@@ -26,13 +26,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: don't run with debug turned on in production!
 #DEBUG = True
 
-#ALLOWED_HOSTS = []
+#ALLOWED_HOSTS = ['*']
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    'django_tenants',
+    #'django_tenants',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -43,11 +43,12 @@ INSTALLED_APPS = [
     'corsheaders',
     'companies',
     'customers',
+    'payments',
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
-    'companies.middleware.SimpleTenantMiddleware',
+    #'companies.middleware.SimpleTenantMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -70,7 +71,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'django_tenants.context_processors.tenant',  # Add for tenant context
+                #'django_tenants.context_processors.tenant',  # Add for tenant context
             ],
         },
     },
@@ -84,12 +85,8 @@ WSGI_APPLICATION = 'universal_billing.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django_tenants.postgresql_backend',
-        'NAME': config('DATABASE_NAME', 'billing'),
-        'USER': config('DATABASE_USER', 'postgres'),
-        'PASSWORD': config('DATABASE_PASSWORD', 'postgres'),
-        'HOST': config('DATABASE_HOST', 'localhost'),
-        'PORT': config('DATABASE_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -130,6 +127,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 # Remove STATICFILES_DIRS if not using a custom static directory
 # STATICFILES_DIRS = [BASE_DIR / 'static']
 
@@ -140,26 +138,26 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [s.strip() for s in v.split(',')])
+#ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: [s.strip() for s in v.split(',')])
 
 # django-tenants
-DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
-SHARED_APPS = [
-    'django_tenants',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'companies',
-]
-TENANT_APPS = [
-    'customers',  # New
-]
-MULTI_TENANT = config('MULTI_TENANT', cast=bool)
-TENANT_MODEL = 'companies.Company'
-DOMAIN_MODEL = 'companies.Domain'
-TENANT_DOMAIN_MODEL = 'companies.Domain'  # Workaround for django-tenants bug
+#DATABASE_ROUTERS = ['django_tenants.routers.TenantSyncRouter']
+#SHARED_APPS = [
+    #'django_tenants',
+    #'django.contrib.admin',
+    #'django.contrib.auth',
+    #'django.contrib.contenttypes',
+    #'django.contrib.sessions',
+    #'django.contrib.messages',
+    #'companies',
+#]
+#TENANT_APPS = [
+    #'customers',  # New
+#]
+#MULTI_TENANT = config('MULTI_TENANT', cast=bool)
+#TENANT_MODEL = 'companies.Company'
+#DOMAIN_MODEL = 'companies.Domain'
+#TENANT_DOMAIN_MODEL = 'companies.Domain'  # Workaround for django-tenants bug
 
 # Celery
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', 'redis://localhost:6379/0')
@@ -171,7 +169,29 @@ CELERY_RESULT_SERIALIZER = 'json'
 # DRF
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.IsAuthenticated'],
+    'DEFAULT_AUTHENTICATION_CLASSES': ['rest_framework.authentication.SessionAuthentication'],
 }
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'logs/django.log',
+        },
+    },
+    'loggers': {
+        '': {
+            'handlers': ['file'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
+
+SESSION_COOKIE_AGE = 1209600  # 2 weeks
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True  # Restrict in production

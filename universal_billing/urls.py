@@ -21,23 +21,17 @@ Including another URLconf
 #    path('admin/', admin.site.urls),
 #]
 
+from django.contrib import admin
 from django.urls import path, include
-from django.http import HttpResponse
-from rest_framework.routers import DefaultRouter
-from companies.views import CompanyViewSet
-from django.views.generic import TemplateView
+from django.shortcuts import redirect
 
-router = DefaultRouter()
-router.register(r'companies', CompanyViewSet, basename='company')
-
-def tenant_view(request):
-    tenant = request.tenant
-    if tenant:
-        return HttpResponse(f"Welcome to {tenant.name} (Schema: {tenant.schema_name})")
-    return HttpResponse("Public Schema")
+def redirect_to_admin(request):
+    return redirect('admin:index')
 
 urlpatterns = [
-    path('', tenant_view, name='tenant_home'),
-    path('api/', include(router.urls)),
-    path('', TemplateView.as_view(template_name='home.html'), name='home'),
+    path('', redirect_to_admin, name='home'),
+    path('admin/', admin.site.urls),
+    path('api/', include('rest_framework.urls')),
+    path('customer/', include('customers.urls')),
+    path('payments/', include('payments.urls')),
 ]

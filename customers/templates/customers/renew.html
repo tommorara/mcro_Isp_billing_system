@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% block title %}Renew Subscription{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Renew Subscription: {{ subscription.package.name }}</h2>
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+    <form method="post">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="package_id" class="form-label">Select Package</label>
+            <select class="form-control" id="package_id" name="package_id" required>
+                {% for package in packages %}
+                    <option value="{{ package.id }}">{{ package.name }} ({{ package.speed }}) - KSH {{ package.price }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Initiate Payment</button>
+    </form>
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary mt-3">Back to Dashboard</a>
+</div>
+{% endblock %}

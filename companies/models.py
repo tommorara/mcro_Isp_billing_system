@@ -1,19 +1,13 @@
 from django.db import models
-from django_tenants.models import TenantMixin, DomainMixin
 
-class Company(TenantMixin):
-    name = models.CharField(max_length=100)
-    email = models.EmailField()
-    created_at = models.DateTimeField(auto_now_add=True)
-    auto_create_schema = True
+class Company(models.Model):
+    name = models.CharField(max_length=255)
+    email = models.EmailField(unique=True)
 
     def __str__(self):
         return self.name
 
-class Domain(DomainMixin):
-    pass
-
-class TenantSettings(models.Model):
-    tenant = models.OneToOneField(Company, on_delete=models.CASCADE)
-    enable_kyc = models.BooleanField(default=False)
-    branding = models.JSONField(default=dict)
+    class Meta:
+        indexes = [
+            models.Index(fields=['name']),
+        ]

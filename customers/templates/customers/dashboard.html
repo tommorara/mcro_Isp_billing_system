@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}Customer Dashboard{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Welcome, {{ customer.name }}</h2>
+    {% if notifications %}
+        <a href="{% url 'customer_notifications' %}" class="btn btn-info mb-3">
+            Notifications <span class="badge bg-danger">{{ notifications.count }}</span>
+        </a>
+    {% endif %}
+    {% if recommendations %}
+        <h3>Recommended Plans</h3>
+        <div class="row">
+            {% for package in recommendations %}
+            <div class="col-md-4">
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ package.name }}</h5>
+                        <p class="card-text">Type: {{ package.connection_type }}</p>
+                        <p class="card-text">Speed: {{ package.speed }}</p>
+                        <p class="card-text">Price: KSH {{ package.price }}</p>
+                        <p class="card-text">Duration: {% if package.duration_hours %}{{ package.duration_hours }} hours{% else %}{{ package.duration_days }} days{% endif %}</p>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+    <h3>Your Active Plans</h3>
+    {% if subscriptions %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Package</th>
+                    <th>Connection Type</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in subscriptions %}
+                <tr>
+                    <td>{{ sub.package.name }}</td>
+                    <td>{{ sub.connection_type }}</td>
+                    <td>{{ sub.is_active|yesno:"Active,Inactive" }}</td>
+                    <td>
+                        <a href="{% url 'customer_renew' sub.id %}" class="btn btn-sm btn-primary">Renew</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No active plans found.</p>
+    {% endif %}
+    <a href="{% url 'customer_plans' %}" class="btn btn-secondary">View All Plans</a>
+    <a href="{% url 'customer_packages' %}?connection_type=HOTSPOT" class="btn btn-secondary">Hotspot Packages</a>
+    <a href="{% url 'customer_packages' %}?connection_type=PPPOE" class="btn btn-secondary">PPPoE Packages</a>
+    <a href="{% url 'customer_packages' %}?connection_type=STATIC" class="btn btn-secondary">Static Packages</a>
+    <a href="{% url 'customer_packages' %}?connection_type=VPN" class="btn btn-secondary">VPN Packages</a>
+    <a href="{% url 'customer_invoices' %}" class="btn btn-secondary">View Invoices</a>
+    <a href="{% url 'customer_notifications' %}" class="btn btn-secondary">View Notifications</a>
+    <a href="{% url 'customer_profile' %}" class="btn btn-secondary">Profile</a>
+    <a href="{% url 'customer_logout' %}" class="btn btn-danger">Logout</a>
+</div>
+{% endblock %}

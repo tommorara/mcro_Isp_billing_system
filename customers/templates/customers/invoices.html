@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Invoices{% endblock %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Your Invoices</h2>
+    {% if invoices %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Invoice ID</th>
+                    <th>Subscription</th>
+                    <th>Amount</th>
+                    <th>Issued Date</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td>{{ invoice.id }}</td>
+                    <td>{{ invoice.subscription.package.name }}</td>
+                    <td>KSH {{ invoice.amount }}</td>
+                    <td>{{ invoice.issued_date|date:"Y-m-d" }}</td>
+                    <td>{{ invoice.status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No invoices found.</p>
+    {% endif %}
+    <a href="{% url 'customer_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+</div>
+{% endblock %}
