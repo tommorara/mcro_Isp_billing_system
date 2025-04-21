@@ -1,0 +1,77 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block content %}
+<h1>Generate Vouchers</h1>
+{% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+            <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+{% if form.errors %}
+    <ul class="errorlist">
+        {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+                <li>{{ field }}: {{ error }}</li>
+            {% endfor %}
+        {% endfor %}
+    </ul>
+{% endif %}
+<form method="post" action="{% url 'admin:voucher_generate' %}">
+    {% csrf_token %}
+    <table>
+        <tr>
+            <td>
+                {{ form.count.label_tag }}
+                <span class="tooltip">
+                    <span class="icon-info">ℹ</span>
+                    <span class="tooltiptext">Number of vouchers to generate (minimum 1).</span>
+                </span>
+            </td>
+            <td>{{ form.count }}</td>
+        </tr>
+        <tr>
+            <td>
+                {{ form.length.label_tag }}
+                <span class="tooltip">
+                    <span class="icon-info">ℹ</span>
+                    <span class="tooltiptext">Length of the random code part (minimum 4).</span>
+                </span>
+            </td>
+            <td>{{ form.length }}</td>
+        </tr>
+        <tr>
+            <td>
+                {{ form.char_type.label_tag }}
+                <span class="tooltip">
+                    <span class="icon-info">ℹ</span>
+                    <span class="tooltiptext">Character set for voucher codes.</span>
+                </span>
+            </td>
+            <td>{{ form.char_type }}</td>
+        </tr>
+        <tr>
+            <td>
+                {{ form.prefix.label_tag }}
+                <span class="tooltip">
+                    <span class="icon-info">ℹ</span>
+                    <span class="tooltiptext">Optional prefix for voucher codes (e.g., ISP-).</span>
+                </span>
+            </td>
+            <td>{{ form.prefix }}</td>
+        </tr>
+        <tr>
+            <td>
+                {{ form.package.label_tag }}
+                <span class="tooltip">
+                    <span class="icon-info">ℹ</span>
+                    <span class="tooltiptext">Select the package for these vouchers.</span>
+                </span>
+            </td>
+            <td>{{ form.package }}</td>
+        </tr>
+    </table>
+    <input type="submit" value="Generate Vouchers">
+</form>
+{% endblock %}

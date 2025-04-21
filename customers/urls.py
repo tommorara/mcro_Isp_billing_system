@@ -15,7 +15,9 @@ urlpatterns = [
     path('renew/<int:subscription_id>/', views.customer_renew, name='customer_renew'),
     path('recharge/<int:subscription_id>/', views.recharge_subscription, name='recharge_subscription'),
     path('redeem_voucher/', views.redeem_voucher, name='redeem_voucher'),
-    path('hotspot/', views.hotspot_login, name='hotspot_login'),
+    path('hotspot-login/', views.hotspot_login, name='hotspot_login'),
     path('api/packages/', PackageList.as_view(), name='package_list'),
     path('api/company/', CompanyDetail.as_view(), name='company_detail'),
+    # Uncomment and implement if needed
+    # path('select-payment-method/<int:invoice_id>/', views.select_payment_method, name='select_payment_method'),
 ]

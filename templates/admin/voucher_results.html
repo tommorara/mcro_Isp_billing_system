@@ -1,0 +1,39 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block content %}
+<h1>Generated Vouchers</h1>
+{% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+            <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+        {% endfor %}
+    </ul>
+{% endif %}
+<p><a href="{% url 'admin:voucher_generate' %}">Generate More Vouchers</a> | <a href="{% url 'admin:customers_voucher_changelist' %}">Back to Voucher List</a></p>
+<table>
+    <thead>
+        <tr>
+            <th>Code</th>
+            <th>Prefix</th>
+            <th>Package</th>
+            <th>Active</th>
+            <th>Created At</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for voucher in vouchers %}
+            <tr>
+                <td>{{ voucher.code }}</td>
+                <td>{{ voucher.prefix|default:"None" }}</td>
+                <td>{{ voucher.package.name }}</td>
+                <td>{{ voucher.is_active|yesno:"Yes,No" }}</td>
+                <td>{{ voucher.created_at }}</td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="5">No vouchers generated.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

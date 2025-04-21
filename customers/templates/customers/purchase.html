@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Purchase Package: {{ package.name }}</h1>
+<p>Price: {{ package.price }}</p>
+<p>Connection Type: {{ package.connection_type }}</p>
+<form method="post">
+    {% csrf_token %}
+    <input type="submit" value="Proceed to Payment">
+</form>
+<p><a href="{% url 'customer_packages' %}">Back to Packages</a></p>
+{% endblock %}

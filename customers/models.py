@@ -1,13 +1,8 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.models import User
 from companies.models import Company
-import uuid
-import secrets
-import string
-
-def generate_voucher_code():
-    return secrets.token_hex(6).upper()
 
 class Customer(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
@@ -19,14 +14,24 @@ class Customer(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['email']),
+        ]
+
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        if self.password and not self.password.startswith('pbkdf2_sha256$'):
+            self.password = make_password(self.password)
+        super().save(*args, **kwargs)
 
 class AuditLog(models.Model):
     action = models.CharField(max_length=100)
     model = models.CharField(max_length=100)
     object_id = models.CharField(max_length=36)
-    user = models.ForeignKey(Customer, on_delete=models.SET_NULL, blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -48,6 +53,12 @@ class Router(models.Model):
         ('RADIUS', 'RADIUS Server'),
         ('VPN', 'VPN Tunnel'),
     )
+    VPN_PROTOCOLS = (
+        ('OPENVPN', 'OpenVPN'),
+        ('PPTP', 'PPTP'),
+        ('L2TP', 'L2TP'),
+        ('WIREGUARD', 'WireGuard'),
+    )
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     location = models.ForeignKey(Location, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
@@ -65,7 +76,7 @@ class Router(models.Model):
     vpn_server = models.CharField(max_length=45, blank=True)
     vpn_protocol = models.CharField(
         max_length=20,
-        choices=(('OPENVPN', 'OpenVPN'), ('PPTP', 'PPTP'), ('L2TP', 'L2TP')),
+        choices=VPN_PROTOCOLS,
         blank=True
     )
     vpn_username = models.CharField(max_length=100, blank=True)
@@ -199,12 +210,17 @@ class SupportMessage(models.Model):
 
 class Voucher(models.Model):
     package = models.ForeignKey(Package, on_delete=models.CASCADE)
-    code = models.CharField(max_length=20, unique=True)  # Increased for prefix
+    code = models.CharField(max_length=20, unique=True)
     prefix = models.CharField(max_length=10, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     redeemed_at = models.DateTimeField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['code']),
+        ]
 
     def __str__(self):
         return self.code

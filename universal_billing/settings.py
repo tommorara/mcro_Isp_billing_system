@@ -33,6 +33,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 INSTALLED_APPS = [
     #'django_tenants',
+    #'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -44,6 +45,7 @@ INSTALLED_APPS = [
     'companies',
     'customers',
     'payments',
+    'plugins',
 ]
 
 MIDDLEWARE = [
