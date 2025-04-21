@@ -121,6 +121,7 @@ class Package(models.Model):
     duration_minutes = models.IntegerField(blank=True, null=True)
     duration_hours = models.IntegerField(blank=True, null=True)
     duration_days = models.IntegerField(blank=True, null=True)
+    data_limit = models.IntegerField(blank=True, null=True, help_text="Data limit in MB (e.g., 200 for 200MB)")
     ip_address = models.CharField(max_length=45, blank=True, help_text="IP address for Static packages")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -224,7 +225,8 @@ class Compensation(models.Model):
     reason = models.TextField()
     duration_minutes = models.IntegerField(blank=True, null=True)
     duration_hours = models.IntegerField(blank=True, null=True)
-    duration_days = models.IntegerField(blank=True, null=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    issued_date = models.DateTimeField(auto_now_add=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

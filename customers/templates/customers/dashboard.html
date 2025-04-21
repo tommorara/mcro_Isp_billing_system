@@ -1,76 +1,91 @@
-{% extends 'base.html' %}
-{% block title %}Customer Dashboard{% endblock %}
-{% block content %}
-<div class="container mt-5">
-    <h2>Welcome, {{ customer.name }}</h2>
-    {% if messages %}
-        {% for message in messages %}
-            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
-        {% endfor %}
-    {% endif %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Customer Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .card { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; }
+        .btn { padding: 10px 20px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+        .btn:hover { background-color: #0056b3; }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .list-group-item { padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Welcome, {{ customer.name }}!</h1>
+    <p>Email: {{ customer.email }}</p>
+    <p>Phone: {{ customer.phone }}</p>
     
-    <h3>Your Subscriptions</h3>
+    <h2>Active Subscriptions</h2>
     {% if subscriptions %}
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>Package</th>
-                    <th>Start Date</th>
-                    <th>End Date</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for sub in subscriptions %}
-                <tr>
-                    <td>{{ sub.package.name }}</td>
-                    <td>{{ sub.start_date|date:"Y-m-d H:i" }}</td>
-                    <td>{{ sub.end_date|date:"Y-m-d H:i" }}</td>
-                    <td>{{ sub.is_active|yesno:"Active,Expired" }}</td>
-                    <td>
-                        <a href="{% url 'customer_renew' sub.id %}" class="btn btn-sm btn-primary">Renew</a>
-                        <a href="{% url 'recharge_subscription' sub.id %}" class="btn btn-sm btn-secondary">Recharge</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="card">
+            {% for subscription in subscriptions %}
+                <p>
+                    {{ subscription.package.name }} ({{ subscription.connection_type }})
+                    - Ends: {{ subscription.end_date|date:"Y-m-d H:i" }}
+                    {% if subscription.is_active %}
+                        <span style="color: green;">Active</span>
+                    {% else %}
+                        <span style="color: red;">Expired</span>
+                    {% endif %}
+                    <br>
+                    Username: {{ subscription.username }}
+                    {% if subscription.package.data_limit_mb %}
+                        <br>Data Limit: {{ subscription.package.data_limit_mb }} MB
+                    {% endif %}
+                </p>
+            {% endfor %}
+        </div>
     {% else %}
-        <p>No subscriptions found.</p>
+        <p>No active subscriptions.</p>
     {% endif %}
     
-    <h3>Recent Invoices</h3>
+    <h2>Recent Invoices</h2>
     {% if invoices %}
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Issued Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for invoice in invoices %}
-                <tr>
-                    <td>{{ invoice.id }}</td>
-                    <td>KSH {{ invoice.amount }}</td>
-                    <td>{{ invoice.status }}</td>
-                    <td>{{ invoice.issued_date|date:"Y-m-d H:i" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="card">
+            {% for invoice in invoices %}
+                <p>
+                    Invoice #{{ invoice.id }} - {{ invoice.amount }} {{ invoice.currency }}
+                    - {{ invoice.status }} - {{ invoice.issued_date|date:"Y-m-d" }}
+                </p>
+            {% endfor %}
+        </div>
     {% else %}
-        <p>No invoices found.</p>
+        <p>No invoices.</p>
     {% endif %}
     
-    <h3>Notifications</h3>
+    <h2>Open Support Tickets</h2>
+    {% if tickets %}
+        <div class="card">
+            {% for ticket in tickets %}
+                <p>
+                    Ticket #{{ ticket.ticket_number }}: {{ ticket.subject }}
+                    - Status: {{ ticket.get_status_display }}
+                    - Created: {{ ticket.created_at|date:"Y-m-d H:i" }}
+                </p>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p>No open tickets.</p>
+    {% endif %}
+    
+    <h2>Available Vouchers</h2>
+    {% if vouchers %}
+        <ul class="list-group">
+            {% for voucher in vouchers %}
+                <li class="list-group-item">{{ voucher.code }} - {{ voucher.package.name }}</li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No vouchers available.</p>
+    {% endif %}
+    
+    <h2>Notifications</h2>
     {% if notifications %}
         <ul class="list-group">
             {% for notification in notifications %}
-            <li class="list-group-item">{{ notification.subject }} - {{ notification.created_at|date:"Y-m-d H:i" }}</li>
+                <li class="list-group-item">{{ notification.subject }} - {{ notification.created_at|date:"Y-m-d H:i" }}</li>
             {% endfor %}
         </ul>
     {% else %}
@@ -79,7 +94,8 @@
     
     <a href="{% url 'customer_profile' %}" class="btn btn-primary mt-3">Profile</a>
     <a href="{% url 'customer_packages' %}" class="btn btn-primary mt-3">Packages</a>
-    <a href="{% url 'customer_support' %}" class="btn btn-primary mt-3">Support</a>
+    <a href="{% url 'customer_tickets' %}" class="btn btn-primary mt-3">Support</a>
+    
     <a href="{% url 'customer_logout' %}" class="btn btn-secondary mt-3">Logout</a>
-</div>
-{% endblock %}
+</body>
+</html>

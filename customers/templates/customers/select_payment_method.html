@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-4">Select Payment Method</h1>
+    <p>Pay for Invoice #{{ invoice.id }} (Amount: {{ invoice.get_amount_display }})</p>
+    <form method="post" class="bg-white p-6 rounded shadow-md">
+        {% csrf_token %}
+        <div class="mb-4">
+            <label for="payment_method" class="block text-sm font-medium text-gray-700">Payment Method</label>
+            <select name="payment_method" id="payment_method" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" required>
+                {% for plugin in payment_plugins %}
+                    <option value="{{ plugin.name }}">{{ plugin.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Proceed to Payment</button>
+    </form>
+</div>
+{% endblock %}

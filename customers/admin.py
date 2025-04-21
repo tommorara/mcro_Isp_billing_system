@@ -105,13 +105,40 @@ class RouterAdmin(admin.ModelAdmin):
     search_fields = ['name', 'ip_address']
     list_filter = ['location', 'connection_type', 'vpn_protocol', 'created_at']
     readonly_fields = ['created_at', 'updated_at']
+    fieldsets = (
+        (None, {
+            'fields': ('company', 'location', 'name', 'connection_type', 'ip_address', 'username', 'password', 'api_port')
+        }),
+        ('RADIUS Settings', {
+            'fields': ('radius_server', 'radius_secret'),
+            'classes': ('collapse',),
+        }),
+        ('VPN Settings', {
+            'fields': ('vpn_server', 'vpn_protocol', 'vpn_username', 'vpn_password', 'vpn_wg_private_key', 'vpn_wg_public_key', 'vpn_wg_endpoint_port'),
+            'classes': ('collapse',),
+        }),
+    )
 
 @admin.register(Package)
 class PackageAdmin(admin.ModelAdmin):
-    list_display = ['name', 'connection_type', 'price_display', 'download_bandwidth', 'company', 'created_at']
+    list_display = ['name', 'connection_type', 'price_display', 'download_bandwidth', 'upload_bandwidth', 'data_limit', 'company', 'created_at']
     search_fields = ['name']
     list_filter = ['connection_type', 'company', 'location', 'created_at']
     readonly_fields = ['created_at', 'updated_at']
+    fieldsets = (
+        (None, {
+            'fields': ('company', 'location', 'router', 'name', 'connection_type', 'price', 'ip_address')
+        }),
+        ('Duration', {
+            'fields': ('duration_minutes', 'duration_hours', 'duration_days'),
+            'classes': ('collapse',),
+        }),
+        ('Bandwidth and Data Settings', {
+            'fields': ('download_bandwidth', 'upload_bandwidth', 'data_limit'),
+            'classes': ('collapse',),
+            'description': 'Configure bandwidth and data limit settings for the package. These are synced to MikroTik for HOTSPOT users.'
+        }),
+    )
 
     def price_display(self, obj):
         return obj.get_price_display()
@@ -152,10 +179,10 @@ class InvoiceAdmin(admin.ModelAdmin):
 
 @admin.register(Compensation)
 class CompensationAdmin(admin.ModelAdmin):
-    list_display = ['customer', 'subscription', 'duration_days', 'duration_hours', 'created_at']
+    list_display = ['customer', 'subscription', 'amount', 'duration_minutes', 'duration_hours', 'issued_date', 'created_at']
     search_fields = ['customer__name', 'reason']
-    list_filter = ['created_at']
-    readonly_fields = ['created_at', 'updated_at']
+    list_filter = ['issued_date', 'created_at']
+    readonly_fields = ['issued_date', 'created_at', 'updated_at']
 
 @admin.register(SupportTicket)
 class SupportTicketAdmin(admin.ModelAdmin):
@@ -255,11 +282,20 @@ class VoucherAdmin(admin.ModelAdmin):
                                 router.ip_address, username=router.username,
                                 password=router.password, port=router.api_port
                             ).get_api()
+                            rate_limit = f"{package.upload_bandwidth}k/{package.download_bandwidth}k" if package.download_bandwidth and package.upload_bandwidth else ""
+                            data_limit_bytes = package.data_limit * 1024 * 1024 if package.data_limit else None
                             if package.connection_type == 'HOTSPOT':
-                                api.get_resource('/ip/hotspot/user').add(
-                                    name=code, password=code, profile=package.name,
-                                    limit_uptime=f"{package.duration_days or 0}d"
-                                )
+                                params = {
+                                    'name': code,
+                                    'password': code,
+                                    'profile': package.name,
+                                    'limit-uptime': f"{package.duration_days or 0}d"
+                                }
+                                if rate_limit:
+                                    params['rate-limit'] = rate_limit
+                                if data_limit_bytes:
+                                    params['limit-bytes-total'] = str(data_limit_bytes)
+                                api.get_resource('/ip/hotspot/user').add(**params)
                                 logger.info(f"Synced voucher {code} to MikroTik Hotspot")
                             elif package.connection_type == 'PPPOE':
                                 api.get_resource('/ppp/secret').add(
@@ -289,13 +325,18 @@ class VoucherAdmin(admin.ModelAdmin):
                         try:
                             db = MySQLdb.connect(
                                 host=router.radius_server, user='radius_user',
-                                passwd='radius_pass', db='radius'
+                                passwd=router.radius_secret, db='radius'
                             )
                             cursor = db.cursor()
                             cursor.execute(
                                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
                                 (code, 'Cleartext-Password', ':=', code)
                             )
+                            if data_limit_bytes:
+                                cursor.execute(
+                                    "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
+                                    (code, 'Mikrotik-Total-Limit', ':=', str(data_limit_bytes))
+                                )
                             if package.connection_type == 'STATIC':
                                 cursor.execute(
                                     "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",

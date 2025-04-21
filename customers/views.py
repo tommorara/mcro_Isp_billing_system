@@ -29,7 +29,7 @@ class PackageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Package
-        fields = ['id', 'name', 'connection_type', 'download_bandwidth', 'upload_bandwidth', 'price_display', 'duration_minutes', 'duration_hours', 'duration_days']
+        fields = ['id', 'name', 'connection_type', 'price_display', 'duration_minutes', 'duration_hours', 'duration_days', 'data_limit']
 
 @api_view(['GET'])
 def hotspot_plans_api(request):
@@ -109,6 +109,12 @@ def connect_to_router(router):
         return None
     raise ValueError(f"Unsupported connection type: {router.connection_type}")
 
+def get_rate_limit(package):
+    """Generate MikroTik rate-limit string for bandwidth settings."""
+    if package.download_bandwidth and package.upload_bandwidth:
+        return f"{package.upload_bandwidth}k/{package.download_bandwidth}k"
+    return ""
+
 @api_view(['GET', 'POST'])
 def hotspot_pay_api(request):
     if request.method == 'POST':
@@ -166,14 +172,24 @@ def hotspot_pay_api(request):
                     voucher.save()
                     
                     router = package.router
+                    data_limit_bytes = package.data_limit * 1024 * 1024 if package.data_limit else None
                     if router.connection_type in ['API', 'VPN']:
                         try:
                             api = connect_to_router(router)
                             if package.connection_type == 'HOTSPOT':
-                                api.get_resource('/ip/hotspot/user').add(
-                                    name=username, password='user123', profile=package.name,
-                                    limit_uptime=f"{package.duration_days or 0}d"
-                                )
+                                params = {
+                                    'name': username,
+                                    'password': 'user123',
+                                    'profile': package.name,
+                                    'limit-uptime': f"{package.duration_days or 0}d",
+                                    'comment': f"Created={timezone.now():%b/%d/%Y %H:%M:%S} Expire={(timezone.now() + duration):%b/%d/%Y %H:%M:%S}"
+                                }
+                                rate_limit = get_rate_limit(package)
+                                if rate_limit:
+                                    params['rate-limit'] = rate_limit
+                                if data_limit_bytes:
+                                    params['limit-bytes-total'] = str(data_limit_bytes)
+                                api.get_resource('/ip/hotspot/user').add(**params)
                             elif package.connection_type == 'PPPOE':
                                 api.get_resource('/ppp/secret').add(
                                     name=username, password='user123', service='pppoe',
@@ -199,13 +215,18 @@ def hotspot_pay_api(request):
                         try:
                             db = MySQLdb.connect(
                                 host=router.radius_server, user='radius_user',
-                                passwd='radius_pass', db='radius'
+                                passwd=router.radius_secret, db='radius'
                             )
                             cursor = db.cursor()
                             cursor.execute(
                                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
                                 (username, 'Cleartext-Password', ':=', 'user123')
                             )
+                            if data_limit_bytes:
+                                cursor.execute(
+                                    "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
+                                    (username, 'Mikrotik-Total-Limit', ':=', str(data_limit_bytes))
+                                )
                             if package.connection_type == 'STATIC':
                                 cursor.execute(
                                     "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
@@ -325,14 +346,24 @@ def hotspot_pay_api(request):
                     payment.invoice.save()
                     
                     router = package.router
+                    data_limit_bytes = package.data_limit * 1024 * 1024 if package.data_limit else None
                     if router.connection_type in ['API', 'VPN']:
                         try:
                             api = connect_to_router(router)
                             if package.connection_type == 'HOTSPOT':
-                                api.get_resource('/ip/hotspot/user').add(
-                                    name=username, password='user123', profile=package.name,
-                                    limit_uptime=f"{package.duration_days or 0}d"
-                                )
+                                params = {
+                                    'name': username,
+                                    'password': 'user123',
+                                    'profile': package.name,
+                                    'limit-uptime': f"{package.duration_days or 0}d",
+                                    'comment': f"Created={timezone.now():%b/%d/%Y %H:%M:%S} Expire={(timezone.now() + duration):%b/%d/%Y %H:%M:%S}"
+                                }
+                                rate_limit = get_rate_limit(package)
+                                if rate_limit:
+                                    params['rate-limit'] = rate_limit
+                                if data_limit_bytes:
+                                    params['limit-bytes-total'] = str(data_limit_bytes)
+                                api.get_resource('/ip/hotspot/user').add(**params)
                             elif package.connection_type == 'PPPOE':
                                 api.get_resource('/ppp/secret').add(
                                     name=username, password='user123', service='pppoe',
@@ -358,13 +389,18 @@ def hotspot_pay_api(request):
                         try:
                             db = MySQLdb.connect(
                                 host=router.radius_server, user='radius_user',
-                                passwd='radius_pass', db='radius'
+                                passwd=router.radius_secret, db='radius'
                             )
                             cursor = db.cursor()
                             cursor.execute(
                                 "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
                                 (username, 'Cleartext-Password', ':=', 'user123')
                             )
+                            if data_limit_bytes:
+                                cursor.execute(
+                                    "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
+                                    (username, 'Mikrotik-Total-Limit', ':=', str(data_limit_bytes))
+                                )
                             if package.connection_type == 'STATIC':
                                 cursor.execute(
                                     "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
@@ -588,8 +624,7 @@ def customer_tickets(request):
             f"A new ticket '{subject}' has been created by {customer.name}.\n\nMessage: {message}\n\nView at {request.build_absolute_uri('/admin/customers/supportticket/')}"
         )
         if ticket.priority == 'HIGH':
-            # Escalate high-priority tickets
-            for admin in customer.company.staff_users.all():  # Assuming Company has a staff_users relation
+            for admin in User.objects.filter(is_staff=True):
                 send_email(
                     admin.email,
                     f"Urgent: High-Priority Ticket #{ticket.ticket_number}",
@@ -621,7 +656,7 @@ def customer_ticket_detail(request, ticket_id):
             is_admin_reply=False,
             parent=ticket
         )
-        ticket.status = 'OPEN'  # Reopen if customer replies
+        ticket.status = 'OPEN'
         ticket.save()
         AuditLog.objects.create(
             action='Reply Added',
@@ -641,7 +676,7 @@ def customer_ticket_detail(request, ticket_id):
             f"{customer.name} replied to '{ticket.subject}'.\n\nMessage: {message}\n\nView at {request.build_absolute_uri('/admin/customers/supportticket/')}"
         )
         if ticket.priority == 'HIGH':
-            for admin in customer.company.staff_users.all():
+            for admin in User.objects.filter(is_staff=True):
                 send_email(
                     admin.email,
                     f"Urgent: Reply to High-Priority Ticket #{ticket.ticket_number}",
@@ -739,14 +774,24 @@ def redeem_voucher(request):
             voucher.save()
             
             router = package.router
+            data_limit_bytes = package.data_limit * 1024 * 1024 if package.data_limit else None
             if router.connection_type in ['API', 'VPN']:
                 try:
                     api = connect_to_router(router)
                     if package.connection_type == 'HOTSPOT':
-                        api.get_resource('/ip/hotspot/user').add(
-                            name=username, password='user123', profile=package.name,
-                            limit_uptime=f"{package.duration_days or 0}d"
-                        )
+                        params = {
+                            'name': username,
+                            'password': 'user123',
+                            'profile': package.name,
+                            'limit-uptime': f"{package.duration_days or 0}d",
+                            'comment': f"Created={timezone.now():%b/%d/%Y %H:%M:%S} Expire={(timezone.now() + duration):%b/%d/%Y %H:%M:%S}"
+                        }
+                        rate_limit = get_rate_limit(package)
+                        if rate_limit:
+                            params['rate-limit'] = rate_limit
+                        if data_limit_bytes:
+                            params['limit-bytes-total'] = str(data_limit_bytes)
+                        api.get_resource('/ip/hotspot/user').add(**params)
                     elif package.connection_type == 'PPPOE':
                         api.get_resource('/ppp/secret').add(
                             name=username, password='user123', service='pppoe',
@@ -772,12 +817,17 @@ def redeem_voucher(request):
                 try:
                     db = MySQLdb.connect(
                         host=router.radius_server, user='radius_user',
-                        passwd='radius_pass', db='radius'
+                        passwd=router.radius_secret, db='radius'
                     )
                     cursor = db.cursor()
                     cursor.execute(
                         "INSERT INTO radcheck (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
                         (username, 'Cleartext-Password', ':=', 'user123')
+                    )
+                    if data_limit_bytes:
+                        cursor.execute(
+                            "INSERT INTO radreply (username, attribute, op, value) VALUES (%s, %s, %s, %s)",
+                        (username, 'Mikrotik-Total-Limit', ':=', str(data_limit_bytes))
                     )
                     if package.connection_type == 'STATIC':
                         cursor.execute(
@@ -805,14 +855,14 @@ def redeem_voucher(request):
                 f"Voucher Redeemed for {package.name}",
                 f"Dear {customer.name},\n\nYour voucher has been redeemed. Username: {subscription.username}, Password: {subscription.password}\n\nBest,\n{package.company.name}"
             )
-            messages.success(request, f'Voucher redeemed! Username: {subscription.username}, Password: {subscription.password}')
+            messages.success(request, 'Voucher redeemed successfully.')
             return redirect('customer_dashboard')
         except Voucher.DoesNotExist:
             messages.error(request, 'Invalid or already used voucher.')
-    return render(request, 'customers/redeem_voucher.html', {'customer': customer})
-
-def hotspot_login(request):
-    return redirect('customer_login')
+            return redirect('redeem_voucher')
+    return render(request, 'customers/redeem_voucher.html', {
+        'customer': customer,
+    })
 
 @customer_required
 def select_payment_method(request, invoice_id):
@@ -820,104 +870,70 @@ def select_payment_method(request, invoice_id):
     invoice = get_object_or_404(Invoice, id=invoice_id, customer=customer)
     payment_plugins = PluginConfig.objects.filter(plugin_type='PAYMENT', is_active=True)
     if request.method == 'POST':
-        plugin_id = request.POST.get('plugin_id')
-        plugin_config = get_object_or_404(PluginConfig, id=plugin_id, plugin_type='PAYMENT', is_active=True)
-        plugin = PaymentPlugin.load(plugin_config)
-        payment = Payment.objects.create(
-            customer=customer,
-            invoice=invoice,
-            amount=invoice.amount,
-            transaction_id=f"{invoice.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}",
-            payment_method=plugin_config.name,
-            status='PENDING'
-        )
+        payment_method = request.POST.get('payment_method')
+        payment_plugin = PluginConfig.objects.filter(name=payment_method, plugin_type='PAYMENT', is_active=True).first()
+        if not payment_plugin:
+            messages.error(request, 'Invalid payment method selected.')
+            return redirect('select_payment_method', invoice_id=invoice.id)
+        
+        plugin = PaymentPlugin.load(payment_plugin)
         response = plugin.initiate_payment(invoice.amount, customer.phone, invoice.id, customer.id)
         if response.get('ResponseCode') == '0':
-            payment.transaction_id = response.get('CheckoutRequestID')
-            payment.save()
-            send_sms(customer.phone, f"Payment initiated. Transaction ID: {payment.transaction_id}")
+            payment = Payment.objects.create(
+                customer=customer,
+                invoice=invoice,
+                amount=invoice.amount,
+                transaction_id=response.get('CheckoutRequestID'),
+                payment_method=payment_plugin.name,
+                status='PENDING'
+            )
+            send_sms(customer.phone, f"Payment initiated for Invoice #{invoice.id}. Transaction ID: {payment.transaction_id}")
             send_email(
                 customer.email,
-                f"Payment Initiated",
-                f"Dear {customer.name},\n\nPayment initiated. Transaction ID: {payment.transaction_id}\n\nBest,\n{invoice.customer.company.name}"
+                f"Payment Initiated for Invoice #{invoice.id}",
+                f"Dear {customer.name},\n\nPayment initiated for Invoice #{invoice.id}. Transaction ID: {payment.transaction_id}\n\nBest,\n{customer.company.name}"
             )
-            messages.success(request, 'Payment initiated. Please complete the payment.')
-            return redirect('customer_invoices')
+            return redirect('hotspot_pay_api', transaction_id=payment.transaction_id)
         else:
-            payment.status = 'FAILED'
-            invoice.status = 'FAILED'
-            payment.save()
-            invoice.save()
-            send_sms(customer.phone, f"Payment failed. Please try again.")
-            send_email(
-                customer.email,
-                f"Payment Failed",
-                f"Dear {customer.name},\n\nPayment failed. Please try again.\n\nBest,\n{invoice.customer.company.name}"
-            )
-            messages.error(request, 'Failed to initiate payment.')
+            messages.error(request, 'Failed to initiate payment. Please try again.')
             return redirect('select_payment_method', invoice_id=invoice.id)
     return render(request, 'customers/select_payment_method.html', {
+        'customer': customer,
         'invoice': invoice,
         'payment_plugins': payment_plugins,
-        'customer': customer,
     })
 
 @user_passes_test(lambda u: u.is_staff)
 def daily_sales_report(request):
-    start_date = request.GET.get('start_date', datetime.now().strftime('%Y-%m-%d'))
-    end_date = request.GET.get('end_date', datetime.now().strftime('%Y-%m-%d'))
-    
-    try:
-        start_date = datetime.strptime(start_date, '%Y-%m-%d')
-        end_date = datetime.strptime(end_date, '%Y-%m-%d')
-    except ValueError:
-        messages.error(request, 'Invalid date format. Use YYYY-MM-DD.')
-        start_date = datetime.now()
-        end_date = datetime.now()
-    
-    sales = Payment.objects.filter(
-        status='SUCCESS',
-        paid_date__date__range=[start_date, end_date]
-    ).annotate(
-        date=TruncDate('paid_date')
-    ).values('date').annotate(
-        total_amount=Sum('amount'),
-        successful_count=Count('id')
-    ).order_by('date')
-    
-    return render(request, 'customers/sales_report.html', {
+    sales = Invoice.objects.filter(status='PAID').annotate(date=TruncDate('paid_date')).values('date').annotate(
+        total=Sum('amount'),
+        count=Count('id')
+    ).order_by('-date')
+    return render(request, 'customers/daily_sales_report.html', {
         'sales': sales,
-        'report_type': 'Daily',
-        'start_date': start_date.strftime('%Y-%m-%d'),
-        'end_date': end_date.strftime('%Y-%m-%d')
     })
 
 @user_passes_test(lambda u: u.is_staff)
 def monthly_sales_report(request):
-    start_date = request.GET.get('start_date', datetime.now().strftime('%Y-%m-01'))
-    end_date = request.GET.get('end_date', datetime.now().strftime('%Y-%m-%d'))
-    
-    try:
-        start_date = datetime.strptime(start_date, '%Y-%m-%d')
-        end_date = datetime.strptime(end_date, '%Y-%m-%d')
-    except ValueError:
-        messages.error(request, 'Invalid date format. Use YYYY-MM-DD.')
-        start_date = datetime.now()
-        end_date = datetime.now()
-    
-    sales = Payment.objects.filter(
-        status='SUCCESS',
-        paid_date__date__range=[start_date, end_date]
-    ).annotate(
-        date=TruncMonth('paid_date')
-    ).values('date').annotate(
-        total_amount=Sum('amount'),
-        successful_count=Count('id')
-    ).order_by('date')
-    
-    return render(request, 'customers/sales_report.html', {
+    sales = Invoice.objects.filter(status='PAID').annotate(month=TruncMonth('paid_date')).values('month').annotate(
+        total=Sum('amount'),
+        count=Count('id')
+    ).order_by('-month')
+    return render(request, 'customers/monthly_sales_report.html', {
         'sales': sales,
-        'report_type': 'Monthly',
-        'start_date': start_date.strftime('%Y-%m-%d'),
-        'end_date': end_date.strftime('%Y-%m-%d')
     })
+
+def hotspot_login(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        try:
+            subscription = Subscription.objects.get(username=username, is_active=True)
+            if subscription.password == password:  # In production, use proper password hashing
+                messages.success(request, 'Hotspot login successful.')
+                return redirect('customer_dashboard')
+            else:
+                messages.error(request, 'Invalid username or password.')
+        except Subscription.DoesNotExist:
+            messages.error(request, 'Invalid username or password.')
+    return render(request, 'customers/hotspot_login.html')
