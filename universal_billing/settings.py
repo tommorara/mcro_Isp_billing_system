@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 from decouple import config
 
@@ -33,7 +34,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 INSTALLED_APPS = [
     #'django_tenants',
-    #'jazzmin',
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -132,6 +133,8 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Remove STATICFILES_DIRS if not using a custom static directory
 # STATICFILES_DIRS = [BASE_DIR / 'static']
 
@@ -199,4 +202,23 @@ SESSION_COOKIE_AGE = 1209600  # 2 weeks
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True  # Restrict in production
+
+AFRICASTALKING_USERNAME = 'your_username'  # e.g., 'sandbox' for testing
+AFRICASTALKING_API_KEY = 'your_api_key'   # Get from Africa's Talking dashboard
+
+SMS_PROVIDER = 'twilio'  # or 'africastalking'
+AFRICASTALKING_USERNAME = 'your_username'
+AFRICASTALKING_API_KEY = 'your_api_key'
+TWILIO_ACCOUNT_SID = 'your_account_sid'
+TWILIO_AUTH_TOKEN = 'your_auth_token'
+TWILIO_PHONE_NUMBER = '+1234567890'  # Your Twilio number
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'your-email@gmail.com'
+EMAIL_HOST_PASSWORD = 'your-app-password'  # Use Gmail App Password
+DEFAULT_FROM_EMAIL = 'your-email@gmail.com'
+
 #SESSION_ENGINE = 'django.contrib.sessions.backends.db'

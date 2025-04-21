@@ -1,48 +1,55 @@
 import string
-import secrets
+import random
 import logging
-from django.db import IntegrityError
-from .models import Voucher
+from django.core.mail import send_mail
+from django.conf import settings
+from plugins.models import PluginConfig
 
 logger = logging.getLogger(__name__)
 
-def generate_voucher_codes(count=1, length=6, char_type='uppercase', prefix=''):
-    """
-    Generate unique voucher codes.
-    :param count: Number of vouchers (default: 1)
-    :param length: Length of random part (default: 6)
-    :param char_type: 'uppercase', 'lowercase', 'numbers', 'random'
-    :param prefix: Optional prefix (e.g., 'ISP-')
-    :return: List of voucher codes
-    """
-    logger.info(f"Attempting to generate {count} voucher codes with length {length}, char_type {char_type}, prefix {prefix}")
+def generate_voucher_codes(count, length, char_type, prefix=''):
+    """Generate unique voucher codes."""
+    codes = set()
     chars = {
         'uppercase': string.ascii_uppercase,
         'lowercase': string.ascii_lowercase,
         'numbers': string.digits,
         'random': string.ascii_letters + string.digits
-    }
-    char_set = chars.get(char_type, string.ascii_uppercase)
-    codes = []
-    attempts = 0
-    max_attempts = count * 10
+    }[char_type]
+    
+    while len(codes) < count:
+        code = ''.join(random.choice(chars) for _ in range(length))
+        full_code = f"{prefix}{code}"
+        codes.add(full_code)
+    
+    return list(codes)
 
-    while len(codes) < count and attempts < max_attempts:
-        try:
-            code = ''.join(secrets.choice(char_set) for _ in range(length))
-            full_code = f"{prefix}{code}"
-            if not Voucher.objects.filter(code=full_code).exists():
-                codes.append(full_code)
-                logger.debug(f"Generated unique code: {full_code}")
-            else:
-                logger.debug(f"Code collision: {full_code}")
-        except Exception as e:
-            logger.error(f"Error generating code: {e}")
-        attempts += 1
+def send_sms(to, message):
+    """Send SMS using the active SMS plugin."""
+    plugin_config = PluginConfig.objects.filter(plugin_type='SMS', is_active=True).first()
+    if not plugin_config:
+        logger.error("No active SMS plugin configured")
+        return {'status': 'error', 'error': 'No active SMS plugin configured'}
+    
+    try:
+        plugin = plugin_config.load()
+        return plugin.send_sms(to, message)
+    except Exception as e:
+        logger.error(f"Failed to send SMS to {to}: {e}")
+        return {'status': 'error', 'error': str(e)}
 
-    if len(codes) < count:
-        logger.error(f"Could only generate {len(codes)} of {count} voucher codes due to collisions after {attempts} attempts")
-        raise ValueError(f"Could only generate {len(codes)} of {count} voucher codes")
-
-    logger.info(f"Successfully generated {len(codes)} voucher codes")
-    return codes
+def send_email(to, subject, message):
+    """Send email using Django's email system."""
+    try:
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [to],
+            fail_silently=False,
+        )
+        logger.info(f"Sent email to {to}: {subject}")
+        return {'status': 'success'}
+    except Exception as e:
+        logger.error(f"Failed to send email to {to}: {e}")
+        return {'status': 'error', 'error': str(e)}

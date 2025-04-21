@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ticket #{{ ticket.ticket_number }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .ticket-details, .reply { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        .reply.admin { background-color: #f0f8ff; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; }
+        .form-group input, .form-group textarea { width: 100%; padding: 8px; }
+        .btn { padding: 10px 20px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+        .btn:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>Ticket #{{ ticket.ticket_number }}: {{ ticket.subject }}</h1>
+    <p>Welcome, {{ customer.name }}!</p>
+    <p>Status: {{ ticket.get_status_display }}</p>
+    <p>Category: {{ ticket.get_category_display }}</p>
+    <p>Priority: {{ ticket.get_priority_display }}</p>
+    <p>Created: {{ ticket.created_at }}</p>
+    <a href="{% url 'customer_tickets' %}">Back to Tickets</a>
+
+    <div class="ticket-details">
+        <p><strong>Message:</strong> {{ ticket.message }}</p>
+        {% if ticket.attachment %}
+            <p><strong>Attachment:</strong> <a href="{{ ticket.attachment.url }}" target="_blank">Download</a></p>
+        {% endif %}
+    </div>
+
+    <h2>Replies</h2>
+    {% for reply in replies %}
+        <div class="reply {% if reply.is_admin_reply %}admin{% endif %}">
+            <p><strong>{{ reply.customer.name }} ({{ 'Admin' if reply.is_admin_reply else 'You' }}):</strong> {{ reply.message }}</p>
+            {% if reply.attachment %}
+                <p><strong>Attachment:</strong> <a href="{{ reply.attachment.url }}" target="_blank">Download</a></p>
+            {% endif %}
+            <p><em>{{ reply.created_at }}</em></p>
+        </div>
+    {% empty %}
+        <p>No replies yet.</p>
+    {% endfor %}
+
+    {% if ticket.status != 'CLOSED' %}
+        <h2>Add Reply</h2>
+        <form method="post" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="message">Message</label>
+                <textarea id="message" name="message" rows="5" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="attachment">Attachment (optional)</label>
+                <input type="file" id="attachment" name="attachment">
+            </div>
+            <button type="submit" class="btn">Send Reply</button>
+        </form>
+    {% endif %}
+
+    <a href="{% url 'customer_dashboard' %}">Back to Dashboard</a>
+</body>
+</html>

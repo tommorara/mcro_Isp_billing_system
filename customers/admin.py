@@ -4,8 +4,10 @@ from django.urls import reverse, path
 from django.utils.html import format_html
 from django.shortcuts import redirect, render
 from django.contrib import messages
-from .models import Customer, AuditLog, Location, Router, Package, Subscription, SessionLog, Invoice, Compensation, SupportMessage, Voucher
-from .utils import generate_voucher_codes
+from django.contrib.auth.hashers import make_password
+from django.contrib.auth.models import User
+from .models import Customer, AuditLog, Location, Router, Package, Subscription, SessionLog, Invoice, Compensation, SupportTicket, Voucher
+from .utils import generate_voucher_codes, send_sms
 import routeros_api
 import MySQLdb
 import logging
@@ -16,6 +18,23 @@ class CustomerAdminForm(forms.ModelForm):
     class Meta:
         model = Customer
         fields = '__all__'
+        help_texts = {
+            'raw_phone': 'Enter phone without country code (e.g., 0712345678 for Kenya)',
+        }
+
+    def clean_raw_phone(self):
+        raw_phone = self.cleaned_data['raw_phone']
+        company = self.cleaned_data.get('company')
+        if company:
+            country = company.country
+            digits = ''.join(filter(str.isdigit, raw_phone))
+            if country == 'KE' and len(digits) != 10:
+                raise forms.ValidationError("Kenyan numbers must have 10 digits (e.g., 0712345678).")
+            elif country == 'US' and len(digits) != 10:
+                raise forms.ValidationError("US numbers must have 10 digits (e.g., 1234567890).")
+            elif country == 'UK' and len(digits) not in [10, 11]:
+                raise forms.ValidationError("UK numbers must have 10 or 11 digits.")
+        return raw_phone
 
     def save(self, commit=True):
         instance = super().save(commit=False)
@@ -45,7 +64,7 @@ class GenerateVouchersForm(forms.Form):
 class CustomerAdmin(admin.ModelAdmin):
     form = CustomerAdminForm
     list_display = ['name', 'email', 'phone', 'company', 'created_at']
-    search_fields = ['name', 'email', 'phone']
+    search_fields = ['name', 'email', 'raw_phone']
     list_filter = ['company', 'created_at']
     readonly_fields = ['created_at', 'updated_at']
     fieldsets = (
@@ -54,7 +73,7 @@ class CustomerAdmin(admin.ModelAdmin):
                 'company',
                 'name',
                 'email',
-                ('phone', 'phone_help'),
+                'raw_phone',
                 'address',
                 'password'
             )
@@ -65,12 +84,6 @@ class CustomerAdmin(admin.ModelAdmin):
         }),
     )
     list_display_links = ['name', 'email']
-
-    def phone_help(self, obj):
-        return format_html(
-            '<span class="tooltip"><span class="icon-info">ℹ</span><span class="tooltiptext">Enter phone in format +254xxxxxxxxx</span></span>'
-        )
-    phone_help.short_description = ''
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
@@ -95,10 +108,14 @@ class RouterAdmin(admin.ModelAdmin):
 
 @admin.register(Package)
 class PackageAdmin(admin.ModelAdmin):
-    list_display = ['name', 'connection_type', 'price', 'download_bandwidth', 'company', 'created_at']
+    list_display = ['name', 'connection_type', 'price_display', 'download_bandwidth', 'company', 'created_at']
     search_fields = ['name']
     list_filter = ['connection_type', 'company', 'location', 'created_at']
     readonly_fields = ['created_at', 'updated_at']
+
+    def price_display(self, obj):
+        return obj.get_price_display()
+    price_display.short_description = 'Price'
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
@@ -116,10 +133,14 @@ class SessionLogAdmin(admin.ModelAdmin):
 
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
-    list_display = ['customer', 'amount', 'status', 'issued_date', 'created_at', 'sales_report']
+    list_display = ['customer', 'amount_display', 'status', 'issued_date', 'created_at', 'sales_report']
     search_fields = ['customer__name']
     list_filter = ['status', 'issued_date', 'created_at']
     readonly_fields = ['created_at', 'updated_at']
+
+    def amount_display(self, obj):
+        return obj.get_amount_display()
+    amount_display.short_description = 'Amount'
 
     def sales_report(self, obj):
         return format_html(
@@ -136,12 +157,54 @@ class CompensationAdmin(admin.ModelAdmin):
     list_filter = ['created_at']
     readonly_fields = ['created_at', 'updated_at']
 
-@admin.register(SupportMessage)
-class SupportMessageAdmin(admin.ModelAdmin):
-    list_display = ['customer', 'subject', 'is_admin_reply', 'is_read', 'created_at']
-    search_fields = ['subject', 'message']
-    list_filter = ['is_admin_reply', 'is_read', 'created_at']
-    readonly_fields = ['created_at', 'updated_at']
+@admin.register(SupportTicket)
+class SupportTicketAdmin(admin.ModelAdmin):
+    list_display = ['ticket_number', 'customer', 'subject', 'category', 'priority', 'status', 'assigned_to', 'is_admin_reply', 'created_at']
+    search_fields = ['ticket_number', 'subject', 'message', 'customer__name', 'customer__email']
+    list_filter = ['category', 'priority', 'status', 'is_admin_reply', 'created_at']
+    readonly_fields = ['ticket_number', 'created_at', 'updated_at']
+    actions = ['mark_in_progress', 'mark_closed']
+    list_editable = ['assigned_to']
+
+    def mark_in_progress(self, request, queryset):
+        for ticket in queryset:
+            if ticket.status != 'IN_PROGRESS':
+                ticket.status = 'IN_PROGRESS'
+                ticket.save()
+                AuditLog.objects.create(
+                    action='Status Changed',
+                    model='SupportTicket',
+                    object_id=ticket.id,
+                    user=request.user,
+                )
+                send_sms(ticket.customer.phone, f"Your ticket #{ticket.ticket_number} is now in progress.")
+                send_email(
+                    ticket.customer.email,
+                    f"Ticket #{ticket.ticket_number} Status Update",
+                    f"Your ticket '{ticket.subject}' is now In Progress."
+                )
+        self.message_user(request, "Selected tickets marked as In Progress.")
+    mark_in_progress.short_description = "Mark as In Progress"
+
+    def mark_closed(self, request, queryset):
+        for ticket in queryset:
+            if ticket.status != 'CLOSED':
+                ticket.status = 'CLOSED'
+                ticket.save()
+                AuditLog.objects.create(
+                    action='Status Changed',
+                    model='SupportTicket',
+                    object_id=ticket.id,
+                    user=request.user,
+                )
+                send_sms(ticket.customer.phone, f"Your ticket #{ticket.ticket_number} has been closed.")
+                send_email(
+                    ticket.customer.email,
+                    f"Ticket #{ticket.ticket_number} Closed",
+                    f"Your ticket '{ticket.subject}' has been closed. Thank you for your feedback."
+                )
+        self.message_user(request, "Selected tickets marked as Closed.")
+    mark_closed.short_description = "Mark as Closed"
 
 @admin.register(Voucher)
 class VoucherAdmin(admin.ModelAdmin):

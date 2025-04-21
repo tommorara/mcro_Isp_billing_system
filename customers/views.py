@@ -6,10 +6,11 @@ from django.contrib.auth.decorators import user_passes_test
 from django.db.models import Sum, Count
 from django.db.models.functions import TruncDate, TruncMonth
 from datetime import timedelta, datetime
-from .models import Customer, Package, Subscription, Invoice, SupportMessage, Voucher, Compensation
+from .models import Customer, Package, Subscription, Invoice, SupportTicket, Voucher, Compensation, AuditLog
+from .utils import send_sms, send_email
 from payments.models import Payment
 from plugins.models import PluginConfig
-from plugins.base import PaymentPlugin, MessagingPlugin
+from plugins.base import PaymentPlugin
 from functools import wraps
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -24,9 +25,11 @@ import os
 logger = logging.getLogger(__name__)
 
 class PackageSerializer(serializers.ModelSerializer):
+    price_display = serializers.CharField(source='get_price_display')
+
     class Meta:
         model = Package
-        fields = ['id', 'name', 'connection_type', 'download_bandwidth', 'upload_bandwidth', 'price', 'duration_minutes', 'duration_hours', 'duration_days']
+        fields = ['id', 'name', 'connection_type', 'download_bandwidth', 'upload_bandwidth', 'price_display', 'duration_minutes', 'duration_hours', 'duration_days']
 
 @api_view(['GET'])
 def hotspot_plans_api(request):
@@ -35,7 +38,7 @@ def hotspot_plans_api(request):
     return Response(serializer.data)
 
 def connect_to_router(router):
-    """Utility to connect to MikroTik router via API, VPN (L2TP, OpenVPN, WireGuard), or RADIUS."""
+    """Utility to connect to MikroTik router via API, VPN, or RADIUS."""
     if router.connection_type == 'API':
         return routeros_api.RouterOsApiPool(
             router.ip_address, username=router.username,
@@ -44,21 +47,18 @@ def connect_to_router(router):
     elif router.connection_type == 'VPN':
         try:
             if router.vpn_protocol == 'L2TP':
-                # L2TP/IPsec: Assume pre-configured on Linux VPS
                 logger.info(f"Connecting to router {router.name} via L2TP")
                 return routeros_api.RouterOsApiPool(
                     router.ip_address, username=router.username,
                     password=router.password, port=router.api_port
                 ).get_api()
             elif router.vpn_protocol == 'OPENVPN':
-                # OpenVPN: Write credentials and config
                 vpn_dir = os.path.join(os.getcwd(), 'vpn_configs')
                 os.makedirs(vpn_dir, exist_ok=True)
                 cred_file = os.path.join(vpn_dir, f"{router.id}.txt")
                 with open(cred_file, 'w') as f:
                     f.write(f"{router.vpn_username}\n{router.vpn_password}")
                 ovpn_file = os.path.join(vpn_dir, f"{router.id}.ovpn")
-                # Placeholder: Assume .ovpn file exists or is provided
                 with open(ovpn_file, 'w') as f:
                     f.write(f"# OpenVPN config for {router.name}\n")
                     f.write(f"client\n")
@@ -66,7 +66,6 @@ def connect_to_router(router):
                     f.write(f"proto tcp\n")
                     f.write(f"remote {router.vpn_server} 1194\n")
                     f.write(f"auth-user-pass {cred_file}\n")
-                    # Add more OpenVPN config as needed
                 subprocess.run([
                     'openvpn', '--config', ovpn_file,
                     '--auth-user-pass', cred_file,
@@ -78,17 +77,16 @@ def connect_to_router(router):
                     password=router.password, port=router.api_port
                 ).get_api()
             elif router.vpn_protocol == 'WIREGUARD':
-                # WireGuard: Assume pre-configured .conf file
                 wg_dir = os.path.join(os.getcwd(), 'wg_configs')
                 os.makedirs(wg_dir, exist_ok=True)
-                wg_conf = os.path.join(wg_dir, f"{router.id}.conf")
+                wg_conf = os.path.join(wg_dir, f"wg_{router.id}.conf")
                 with open(wg_conf, 'w') as f:
                     f.write(f"[Interface]\n")
-                    f.write(f"PrivateKey = {router.vpn_password}\n")  # Simplified
+                    f.write(f"PrivateKey = {router.vpn_wg_private_key}\n")
                     f.write(f"Address = 10.0.0.2/24\n")
                     f.write(f"[Peer]\n")
-                    f.write(f"PublicKey = <server_public_key>\n")  # Replace with actual key
-                    f.write(f"Endpoint = {router.vpn_server}:51820\n")
+                    f.write(f"PublicKey = {router.vpn_wg_public_key}\n")
+                    f.write(f"Endpoint = {router.vpn_server}:{router.vpn_wg_endpoint_port}\n")
                     f.write(f"AllowedIPs = 0.0.0.0/0\n")
                 subprocess.run(['wg-quick', 'up', wg_conf], check=True)
                 logger.info(f"Started WireGuard for router {router.name}")
@@ -97,7 +95,6 @@ def connect_to_router(router):
                     password=router.password, port=router.api_port
                 ).get_api()
             elif router.vpn_protocol == 'PPTP':
-                # PPTP: Less secure, rarely used
                 logger.info(f"Connecting to router {router.name} via PPTP")
                 return routeros_api.RouterOsApiPool(
                     router.ip_address, username=router.username,
@@ -118,22 +115,29 @@ def hotspot_pay_api(request):
         try:
             data = json.loads(request.body)
             package_id = data.get('package_id')
-            phone = data.get('phone')
+            raw_phone = data.get('phone')
             voucher_code = data.get('voucher_code')
             
-            if not package_id or not phone:
+            if not package_id or not raw_phone:
                 return Response({'error': 'Package ID and phone number are required'}, status=400)
             
             package = get_object_or_404(Package, id=package_id, connection_type__in=['HOTSPOT', 'PPPOE', 'STATIC', 'VPN'])
             customer, created = Customer.objects.get_or_create(
-                email=f"{package.connection_type.lower()}_{phone}@example.com".lower(),
+                email=f"{package.connection_type.lower()}_{raw_phone}@example.com".lower(),
                 defaults={
                     'company': package.company,
-                    'name': f"{package.connection_type} User {phone}",
-                    'phone': phone,
+                    'name': f"{package.connection_type} User {raw_phone}",
+                    'raw_phone': raw_phone,
                     'password': make_password('user123')
                 }
             )
+            if created:
+                send_sms(customer.phone, f"Welcome to {package.company.name}! Your account has been created.")
+                send_email(
+                    customer.email,
+                    f"Welcome to {package.company.name}",
+                    f"Dear {customer.name},\n\nYour account has been created. Log in at {request.build_absolute_uri('/customer/login/')}.\n\nBest,\n{package.company.name}"
+                )
             
             if voucher_code:
                 try:
@@ -145,7 +149,7 @@ def hotspot_pay_api(request):
                         timedelta(hours=package.duration_hours or 0) +
                         timedelta(days=package.duration_days or 0)
                     )
-                    username = voucher.code if package.connection_type == 'HOTSPOT' and package.company.hotspot_login_method == 'VOUCHER' else f"{package.connection_type.lower()}_{phone}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                    username = voucher.code if package.connection_type == 'HOTSPOT' and package.company.hotspot_login_method == 'VOUCHER' else f"{package.connection_type.lower()}_{raw_phone}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
                     subscription = Subscription.objects.create(
                         customer=customer,
                         package=package,
@@ -178,8 +182,9 @@ def hotspot_pay_api(request):
                             elif package.connection_type == 'STATIC':
                                 api.get_resource('/ip/dhcp-server/lease').add(
                                     address=package.ip_address or '192.168.1.100',
-                                    mac_address="",
-                                    comment=f"Subscription {username}", server="all",
+                                    mac_address='',
+                                    comment=f"Subscription {username}",
+                                    server='all',
                                     lease_time=f"{package.duration_days or 30}d"
                                 )
                             elif package.connection_type == 'VPN':
@@ -221,11 +226,17 @@ def hotspot_pay_api(request):
                         except Exception as e:
                             logger.error(f"Failed to sync {username} to RADIUS: {e}")
                     
+                    send_sms(customer.phone, f"Voucher redeemed! Username: {subscription.username}, Password: {subscription.password}")
+                    send_email(
+                        customer.email,
+                        f"Voucher Redeemed for {package.name}",
+                        f"Dear {customer.name},\n\nYour voucher has been redeemed. Username: {subscription.username}, Password: {subscription.password}\n\nBest,\n{package.company.name}"
+                    )
                     return Response({
                         'status': 'success',
                         'username': subscription.username,
                         'password': subscription.password,
-                        'login_method': package.company.hotspot_login_method if package.connection_type == 'HOTSPOT' else package.connection_type
+                        'login_method': package.company.hotspot_login_method
                     })
                 except Voucher.DoesNotExist:
                     return Response({'error': 'Invalid or already used voucher'}, status=400)
@@ -250,10 +261,16 @@ def hotspot_pay_api(request):
                 status='PENDING'
             )
             
-            response = plugin.initiate_payment(package.price, phone, invoice.id, customer.id)
+            response = plugin.initiate_payment(package.price, customer.phone, invoice.id, customer.id)
             if response.get('ResponseCode') == '0':
                 payment.transaction_id = response.get('CheckoutRequestID')
                 payment.save()
+                send_sms(customer.phone, f"Payment initiated for {package.name}. Transaction ID: {payment.transaction_id}")
+                send_email(
+                    customer.email,
+                    f"Payment Initiated for {package.name}",
+                    f"Dear {customer.name},\n\nPayment initiated for {package.name}. Transaction ID: {payment.transaction_id}\n\nBest,\n{package.company.name}"
+                )
                 return Response({
                     'status': 'pending',
                     'transaction_id': payment.transaction_id,
@@ -264,6 +281,12 @@ def hotspot_pay_api(request):
                 invoice.status = 'FAILED'
                 payment.save()
                 invoice.save()
+                send_sms(customer.phone, f"Payment failed for {package.name}. Please try again.")
+                send_email(
+                    customer.email,
+                    f"Payment Failed for {package.name}",
+                    f"Dear {customer.name},\n\nPayment failed for {package.name}. Please try again.\n\nBest,\n{package.company.name}"
+                )
                 return Response({'error': 'Failed to initiate payment'}, status=400)
         
         except Exception as e:
@@ -286,7 +309,7 @@ def hotspot_pay_api(request):
                         timedelta(hours=package.duration_hours or 0) +
                         timedelta(days=package.duration_days or 0)
                     )
-                    username = f"{package.connection_type.lower()}_{payment.customer.phone}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                    username = f"{package.connection_type.lower()}_{payment.customer.raw_phone}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
                     subscription = Subscription.objects.create(
                         customer=payment.customer,
                         package=package,
@@ -318,8 +341,9 @@ def hotspot_pay_api(request):
                             elif package.connection_type == 'STATIC':
                                 api.get_resource('/ip/dhcp-server/lease').add(
                                     address=package.ip_address or '192.168.1.100',
-                                    mac_address="",
-                                    comment=f"Subscription {username}", server="all",
+                                    mac_address='',
+                                    comment=f"Subscription {username}",
+                                    server='all',
                                     lease_time=f"{package.duration_days or 30}d"
                                 )
                             elif package.connection_type == 'VPN':
@@ -361,11 +385,17 @@ def hotspot_pay_api(request):
                         except Exception as e:
                             logger.error(f"Failed to sync {username} to RADIUS: {e}")
                 
+                send_sms(payment.customer.phone, f"Payment successful! Username: {subscription.username}, Password: {subscription.password}")
+                send_email(
+                    payment.customer.email,
+                    f"Payment Successful for {subscription.package.name}",
+                    f"Dear {payment.customer.name},\n\nPayment successful! Username: {subscription.username}, Password: {subscription.password}\n\nBest,\n{subscription.package.company.name}"
+                )
                 return Response({
                     'status': 'success',
                     'username': subscription.username,
                     'password': subscription.password,
-                    'login_method': subscription.package.company.hotspot_login_method if subscription.connection_type == 'HOTSPOT' else subscription.connection_type
+                    'login_method': subscription.package.company.hotspot_login_method
                 })
             elif payment.status == 'FAILED':
                 return Response({'status': 'failed', 'error': 'Payment failed'})
@@ -392,6 +422,12 @@ def customer_login(request):
             if check_password(password, customer.password):
                 request.session['customer_id'] = customer.id
                 logger.info(f"Customer {email} logged in successfully")
+                send_sms(customer.phone, f"You have logged in to your {customer.company.name} account.")
+                send_email(
+                    customer.email,
+                    f"Login to {customer.company.name}",
+                    f"Dear {customer.name},\n\nYou have successfully logged in.\n\nBest,\n{customer.company.name}"
+                )
                 messages.success(request, 'Logged in successfully.')
                 return redirect('customer_dashboard')
             else:
@@ -403,7 +439,14 @@ def customer_login(request):
     return render(request, 'customers/login.html')
 
 def customer_logout(request):
+    customer = Customer.objects.get(id=request.session.get('customer_id'))
     request.session.flush()
+    send_sms(customer.phone, f"You have logged out of your {customer.company.name} account.")
+    send_email(
+        customer.email,
+        f"Logout from {customer.company.name}",
+        f"Dear {customer.name},\n\nYou have successfully logged out.\n\nBest,\n{customer.company.name}"
+    )
     messages.success(request, 'Logged out successfully.')
     return redirect('customer_login')
 
@@ -412,13 +455,13 @@ def customer_dashboard(request):
     customer = Customer.objects.get(id=request.session['customer_id'])
     subscriptions = Subscription.objects.filter(customer=customer)
     invoices = Invoice.objects.filter(customer=customer)
-    notifications = SupportMessage.objects.filter(customer=customer, is_admin_reply=True, is_read=False)
+    tickets = SupportTicket.objects.filter(customer=customer, parent__isnull=True, is_admin_reply=False)
     vouchers = Voucher.objects.filter(package__company=customer.company, is_active=True)
     return render(request, 'customers/dashboard.html', {
         'customer': customer,
         'subscriptions': subscriptions,
         'invoices': invoices,
-        'notifications': notifications,
+        'tickets': tickets,
         'vouchers': vouchers,
     })
 
@@ -429,12 +472,18 @@ def customer_profile(request):
     if request.method == 'POST':
         customer.name = request.POST.get('name')
         customer.email = request.POST.get('email', '').lower()
-        customer.phone = request.POST.get('phone')
+        customer.raw_phone = request.POST.get('raw_phone')
         customer.address = request.POST.get('address')
         password = request.POST.get('password')
         if password:
             customer.password = make_password(password)
         customer.save()
+        send_sms(customer.phone, "Your profile has been updated successfully.")
+        send_email(
+            customer.email,
+            f"Profile Updated at {customer.company.name}",
+            f"Dear {customer.name},\n\nYour profile has been updated successfully.\n\nBest,\n{customer.company.name}"
+        )
         messages.success(request, 'Profile updated successfully.')
         return redirect('customer_profile')
     return render(request, 'customers/profile.html', {
@@ -471,6 +520,12 @@ def customer_purchase(request, package_id):
             amount=package.price,
             status='PENDING'
         )
+        send_sms(customer.phone, f"Purchase initiated for {package.name}. Invoice ID: {invoice.id}")
+        send_email(
+            customer.email,
+            f"Purchase Initiated for {package.name}",
+            f"Dear {customer.name},\n\nPurchase initiated for {package.name}. Invoice ID: {invoice.id}\n\nBest,\n{package.company.name}"
+        )
         return redirect('select_payment_method', invoice_id=invoice.id)
     return render(request, 'customers/purchase.html', {
         'package': package,
@@ -496,46 +551,107 @@ def customer_invoices(request):
     })
 
 @customer_required
-def customer_notifications(request):
+def customer_tickets(request):
     customer = Customer.objects.get(id=request.session['customer_id'])
-    notifications = SupportMessage.objects.filter(customer=customer, is_admin_reply=True).order_by('-created_at')
+    tickets = SupportTicket.objects.filter(customer=customer, parent__isnull=True, is_admin_reply=False).order_by('-created_at')
     if request.method == 'POST':
-        notification_id = request.POST.get('notification_id')
-        notification = get_object_or_404(SupportMessage, id=notification_id, customer=customer)
-        notification.is_read = True
-        notification.save()
-        messages.success(request, 'Notification marked as read.')
-        return redirect('customer_notifications')
-    return render(request, 'customers/notifications.html', {
-        'notifications': notifications,
+        subject = request.POST.get('subject')
+        message = request.POST.get('message')
+        category = request.POST.get('category')
+        priority = request.POST.get('priority')
+        attachment = request.FILES.get('attachment')
+        ticket = SupportTicket.objects.create(
+            customer=customer,
+            subject=subject,
+            message=message,
+            category=category,
+            priority=priority,
+            attachment=attachment,
+            status='OPEN',
+            is_admin_reply=False
+        )
+        AuditLog.objects.create(
+            action='Ticket Created',
+            model='SupportTicket',
+            object_id=ticket.id,
+            user=None,  # Customer action
+        )
+        send_sms(customer.phone, f"Support ticket #{ticket.ticket_number} created: {subject}")
+        send_email(
+            customer.email,
+            f"Support Ticket #{ticket.ticket_number} Created",
+            f"Dear {customer.name},\n\nYour ticket '{subject}' has been created.\n\nBest,\n{customer.company.name}"
+        )
+        send_email(
+            customer.company.email,
+            f"New Support Ticket #{ticket.ticket_number}",
+            f"A new ticket '{subject}' has been created by {customer.name}.\n\nMessage: {message}\n\nView at {request.build_absolute_uri('/admin/customers/supportticket/')}"
+        )
+        if ticket.priority == 'HIGH':
+            # Escalate high-priority tickets
+            for admin in customer.company.staff_users.all():  # Assuming Company has a staff_users relation
+                send_email(
+                    admin.email,
+                    f"Urgent: High-Priority Ticket #{ticket.ticket_number}",
+                    f"High-priority ticket '{subject}' by {customer.name} requires immediate attention.\n\nMessage: {message}\n\nView at {request.build_absolute_uri('/admin/customers/supportticket/')}"
+                )
+        messages.success(request, f'Ticket #{ticket.ticket_number} created successfully.')
+        return redirect('customer_tickets')
+    return render(request, 'customers/tickets.html', {
+        'tickets': tickets,
         'customer': customer,
     })
 
 @customer_required
-def customer_support(request):
+def customer_ticket_detail(request, ticket_id):
     customer = Customer.objects.get(id=request.session['customer_id'])
+    ticket = get_object_or_404(SupportTicket, id=ticket_id, customer=customer, parent__isnull=True, is_admin_reply=False)
+    replies = SupportTicket.objects.filter(parent=ticket).order_by('created_at')
     if request.method == 'POST':
-        subject = request.POST.get('subject')
         message = request.POST.get('message')
-        SupportMessage.objects.create(
+        attachment = request.FILES.get('attachment')
+        reply = SupportTicket.objects.create(
             customer=customer,
-            subject=subject,
+            subject=f"Re: {ticket.subject}",
             message=message,
-            is_admin_reply=False
+            category=ticket.category,
+            priority=ticket.priority,
+            attachment=attachment,
+            status=ticket.status,
+            is_admin_reply=False,
+            parent=ticket
         )
-        messaging_plugin = PluginConfig.objects.filter(plugin_type='MESSAGING', is_active=True).first()
-        if messaging_plugin:
-            plugin = MessagingPlugin.load(messaging_plugin)
-            try:
-                plugin.send_message(customer.phone, f"Support ticket created: {subject}")
-                logger.info(f"Sent notification to {customer.phone}")
-            except Exception as e:
-                logger.error(f"Failed to send notification to {customer.phone}: {e}")
-        messages.success(request, 'Support message sent successfully.')
-        return redirect('customer_support')
-    messages_list = SupportMessage.objects.filter(customer=customer).order_by('-created_at')
-    return render(request, 'customers/support.html', {
-        'messages': messages_list,
+        ticket.status = 'OPEN'  # Reopen if customer replies
+        ticket.save()
+        AuditLog.objects.create(
+            action='Reply Added',
+            model='SupportTicket',
+            object_id=reply.id,
+            user=None,  # Customer action
+        )
+        send_sms(customer.phone, f"Reply added to ticket #{ticket.ticket_number}: {ticket.subject}")
+        send_email(
+            customer.email,
+            f"Reply Added to Ticket #{ticket.ticket_number}",
+            f"Dear {customer.name},\n\nYour reply to '{ticket.subject}' has been received.\n\nBest,\n{customer.company.name}"
+        )
+        send_email(
+            customer.company.email,
+            f"New Reply to Ticket #{ticket.ticket_number}",
+            f"{customer.name} replied to '{ticket.subject}'.\n\nMessage: {message}\n\nView at {request.build_absolute_uri('/admin/customers/supportticket/')}"
+        )
+        if ticket.priority == 'HIGH':
+            for admin in customer.company.staff_users.all():
+                send_email(
+                    admin.email,
+                    f"Urgent: Reply to High-Priority Ticket #{ticket.ticket_number}",
+                    f"{customer.name} replied to high-priority ticket '{ticket.subject}'.\n\nMessage: {message}\n\nView at {request.build_absolute_uri('/admin/customers/supportticket/')}"
+                )
+        messages.success(request, 'Reply sent successfully.')
+        return redirect('customer_ticket_detail', ticket_id=ticket.id)
+    return render(request, 'customers/ticket_detail.html', {
+        'ticket': ticket,
+        'replies': replies,
         'customer': customer,
     })
 
@@ -551,6 +667,12 @@ def customer_renew(request, subscription_id):
             subscription=subscription,
             amount=package.price,
             status='PENDING'
+        )
+        send_sms(customer.phone, f"Renewal initiated for {subscription.package.name}. Invoice ID: {invoice.id}")
+        send_email(
+            customer.email,
+            f"Renewal Initiated for {subscription.package.name}",
+            f"Dear {customer.name},\n\nRenewal initiated for {subscription.package.name}. Invoice ID: {invoice.id}\n\nBest,\n{package.company.name}"
         )
         return redirect('select_payment_method', invoice_id=invoice.id)
     packages = Package.objects.filter(connection_type=subscription.connection_type, router=subscription.router)
@@ -573,6 +695,12 @@ def recharge_subscription(request, subscription_id):
             amount=package.price,
             status='PENDING'
         )
+        send_sms(customer.phone, f"Recharge initiated for {subscription.package.name}. Invoice ID: {invoice.id}")
+        send_email(
+            customer.email,
+            f"Recharge Initiated for {subscription.package.name}",
+            f"Dear {customer.name},\n\nRecharge initiated for {subscription.package.name}. Invoice ID: {invoice.id}\n\nBest,\n{package.company.name}"
+        )
         return redirect('select_payment_method', invoice_id=invoice.id)
     packages = Package.objects.filter(connection_type=subscription.connection_type, router=subscription.router)
     return render(request, 'customers/recharge.html', {
@@ -594,7 +722,7 @@ def redeem_voucher(request):
                 timedelta(hours=package.duration_hours or 0) +
                 timedelta(days=package.duration_days or 0)
             )
-            username = voucher.code if package.connection_type == 'HOTSPOT' and package.company.hotspot_login_method == 'VOUCHER' else f"{package.connection_type.lower()}_{customer.phone}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
+            username = voucher.code if package.connection_type == 'HOTSPOT' and package.company.hotspot_login_method == 'VOUCHER' else f"{package.connection_type.lower()}_{customer.raw_phone}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
             subscription = Subscription.objects.create(
                 customer=customer,
                 package=package,
@@ -627,8 +755,9 @@ def redeem_voucher(request):
                     elif package.connection_type == 'STATIC':
                         api.get_resource('/ip/dhcp-server/lease').add(
                             address=package.ip_address or '192.168.1.100',
-                            mac_address="",
-                            comment=f"Subscription {username}", server="all",
+                            mac_address='',
+                            comment=f"Subscription {username}",
+                            server='all',
                             lease_time=f"{package.duration_days or 30}d"
                         )
                     elif package.connection_type == 'VPN':
@@ -670,6 +799,12 @@ def redeem_voucher(request):
                 except Exception as e:
                     logger.error(f"Failed to sync {username} to RADIUS: {e}")
             
+            send_sms(customer.phone, f"Voucher redeemed! Username: {subscription.username}, Password: {subscription.password}")
+            send_email(
+                customer.email,
+                f"Voucher Redeemed for {package.name}",
+                f"Dear {customer.name},\n\nYour voucher has been redeemed. Username: {subscription.username}, Password: {subscription.password}\n\nBest,\n{package.company.name}"
+            )
             messages.success(request, f'Voucher redeemed! Username: {subscription.username}, Password: {subscription.password}')
             return redirect('customer_dashboard')
         except Voucher.DoesNotExist:
@@ -700,6 +835,12 @@ def select_payment_method(request, invoice_id):
         if response.get('ResponseCode') == '0':
             payment.transaction_id = response.get('CheckoutRequestID')
             payment.save()
+            send_sms(customer.phone, f"Payment initiated. Transaction ID: {payment.transaction_id}")
+            send_email(
+                customer.email,
+                f"Payment Initiated",
+                f"Dear {customer.name},\n\nPayment initiated. Transaction ID: {payment.transaction_id}\n\nBest,\n{invoice.customer.company.name}"
+            )
             messages.success(request, 'Payment initiated. Please complete the payment.')
             return redirect('customer_invoices')
         else:
@@ -707,6 +848,12 @@ def select_payment_method(request, invoice_id):
             invoice.status = 'FAILED'
             payment.save()
             invoice.save()
+            send_sms(customer.phone, f"Payment failed. Please try again.")
+            send_email(
+                customer.email,
+                f"Payment Failed",
+                f"Dear {customer.name},\n\nPayment failed. Please try again.\n\nBest,\n{invoice.customer.company.name}"
+            )
             messages.error(request, 'Failed to initiate payment.')
             return redirect('select_payment_method', invoice_id=invoice.id)
     return render(request, 'customers/select_payment_method.html', {

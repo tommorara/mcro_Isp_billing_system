@@ -1,32 +1,19 @@
-from abc import ABC, abstractmethod
-import importlib
+import logging
 
-class BasePlugin(ABC):
+logger = logging.getLogger(__name__)
+
+class BaseSMSPlugin:
     def __init__(self, config):
         self.config = config
 
-    @classmethod
-    def load(cls, config):
-        module_name, class_name = config.module_path.rsplit('.', 1)
-        module = importlib.import_module(module_name)
-        plugin_class = getattr(module, class_name)
-        return plugin_class(config.config)
+    def send_sms(self, to, message):
+        """Implement SMS sending logic in subclasses."""
+        raise NotImplementedError("SMS plugin must implement send_sms method")
 
-class PaymentPlugin(BasePlugin):
-    @abstractmethod
+class PaymentPlugin:
+    def __init__(self, config):
+        self.config = config
+
     def initiate_payment(self, amount, phone, invoice_id, customer_id):
-        pass
-
-    @abstractmethod
-    def check_payment_status(self, transaction_id):
-        pass
-
-class MessagingPlugin(BasePlugin):
-    @abstractmethod
-    def send_message(self, phone, message):
-        pass
-
-class NetworkingPlugin(BasePlugin):
-    @abstractmethod
-    def sync_credentials(self, router, username, password, profile, limit_uptime):
-        pass
+        """Implement payment initiation logic in subclasses."""
+        raise NotImplementedError("Payment plugin must implement initiate_payment method")

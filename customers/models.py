@@ -8,7 +8,7 @@ class Customer(models.Model):
     company = models.ForeignKey(Company, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=15)
+    raw_phone = models.CharField(max_length=15, help_text="Enter phone without country code (e.g., 0712345678)")
     address = models.TextField(blank=True)
     password = models.CharField(max_length=128)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -21,6 +21,17 @@ class Customer(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def phone(self):
+        """Return full phone number with country code."""
+        if self.raw_phone:
+            country_code = self.company.get_country_code()
+            digits = ''.join(filter(str.isdigit, self.raw_phone))
+            if self.company.country == 'KE' and len(digits) == 10 and digits.startswith('0'):
+                return f"{country_code}{digits[1:]}"
+            return f"{country_code}{digits}"
+        return ''
 
     def save(self, *args, **kwargs):
         if self.password and not self.password.startswith('pbkdf2_sha256$'):
@@ -81,6 +92,9 @@ class Router(models.Model):
     )
     vpn_username = models.CharField(max_length=100, blank=True)
     vpn_password = models.CharField(max_length=128, blank=True)
+    vpn_wg_private_key = models.CharField(max_length=256, blank=True, help_text="WireGuard private key")
+    vpn_wg_public_key = models.CharField(max_length=256, blank=True, help_text="WireGuard server public key")
+    vpn_wg_endpoint_port = models.IntegerField(default=51820, blank=True, null=True, help_text="WireGuard endpoint port")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -107,6 +121,7 @@ class Package(models.Model):
     duration_minutes = models.IntegerField(blank=True, null=True)
     duration_hours = models.IntegerField(blank=True, null=True)
     duration_days = models.IntegerField(blank=True, null=True)
+    ip_address = models.CharField(max_length=45, blank=True, help_text="IP address for Static packages")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -119,6 +134,16 @@ class Package(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_price_display(self):
+        """Return price with currency symbol."""
+        currency_symbols = {
+            'KES': 'KSh',
+            'USD': '$',
+            'EUR': '€',
+        }
+        symbol = currency_symbols.get(self.company.currency, 'KSh')
+        return f"{symbol} {self.price}"
 
 class Subscription(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
@@ -183,6 +208,16 @@ class Invoice(models.Model):
     def __str__(self):
         return f"Invoice {self.id} for {self.customer.name}"
 
+    def get_amount_display(self):
+        """Return amount with currency symbol."""
+        currency_symbols = {
+            'KES': 'KSh',
+            'USD': '$',
+            'EUR': '€',
+        }
+        symbol = currency_symbols.get(self.customer.company.currency, 'KSh')
+        return f"{symbol} {self.amount}"
+
 class Compensation(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
     subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE)
@@ -196,17 +231,53 @@ class Compensation(models.Model):
     def __str__(self):
         return f"Compensation for {self.customer.name}"
 
-class SupportMessage(models.Model):
+class SupportTicket(models.Model):
+    STATUS_CHOICES = (
+        ('OPEN', 'Open'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('CLOSED', 'Closed'),
+    )
+    CATEGORY_CHOICES = (
+        ('BILLING', 'Billing'),
+        ('TECHNICAL', 'Technical'),
+        ('GENERAL', 'General'),
+    )
+    PRIORITY_CHOICES = (
+        ('LOW', 'Low'),
+        ('MEDIUM', 'Medium'),
+        ('HIGH', 'High'),
+    )
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    ticket_number = models.CharField(max_length=20, unique=True, editable=False)
     subject = models.CharField(max_length=200)
     message = models.TextField()
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='GENERAL')
+    priority = models.CharField(max_length=20, choices=PRIORITY_CHOICES, default='MEDIUM')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, blank=True, null=True, related_name='assigned_tickets')
+    attachment = models.FileField(upload_to='tickets/attachments/', blank=True, null=True)
     is_admin_reply = models.BooleanField(default=False)
-    is_read = models.BooleanField(default=False)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, blank=True, null=True, related_name='replies')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['ticket_number']),
+            models.Index(fields=['status']),
+            models.Index(fields=['category']),
+            models.Index(fields=['priority']),
+        ]
+
     def __str__(self):
-        return f"Support message from {self.customer.name}: {self.subject}"
+        return f"Ticket #{self.ticket_number}: {self.subject}"
+
+    def save(self, *args, **kwargs):
+        if not self.ticket_number:
+            last_ticket = SupportTicket.objects.all().order_by('-id').first()
+            ticket_num = (last_ticket.id + 1) if last_ticket else 1
+            self.ticket_number = f"TCK-{ticket_num:06d}"
+        super().save(*args, **kwargs)
 
 class Voucher(models.Model):
     package = models.ForeignKey(Package, on_delete=models.CASCADE)

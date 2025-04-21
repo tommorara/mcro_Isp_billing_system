@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Support Tickets</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .ticket-list { margin-top: 20px; }
+        .ticket { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; }
+        .form-group input, .form-group textarea, .form-group select { width: 100%; padding: 8px; }
+        .btn { padding: 10px 20px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+        .btn:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <h1>Support Tickets</h1>
+    <p>Welcome, {{ customer.name }}!</p>
+    <a href="{% url 'customer_dashboard' %}">Back to Dashboard</a>
+    
+    <h2>Create New Ticket</h2>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="subject">Subject</label>
+            <input type="text" id="subject" name="subject" required>
+        </div>
+        <div class="form-group">
+            <label for="category">Category</label>
+            <select id="category" name="category" required>
+                <option value="BILLING">Billing</option>
+                <option value="TECHNICAL">Technical</option>
+                <option value="GENERAL" selected>General</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="priority">Priority</label>
+            <select id="priority" name="priority" required>
+                <option value="LOW">Low</option>
+                <option value="MEDIUM" selected>Medium</option>
+                <option value="HIGH">High</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="message">Message</label>
+            <textarea id="message" name="message" rows="5" required></textarea>
+        </div>
+        <div class="form-group">
+            <label for="attachment">Attachment (optional)</label>
+            <input type="file" id="attachment" name="attachment">
+        </div>
+        <button type="submit" class="btn">Submit Ticket</button>
+    </form>
+
+    <h2>Your Tickets</h2>
+    <div class="ticket-list">
+        {% for ticket in tickets %}
+            <div class="ticket">
+                <h3><a href="{% url 'customer_ticket_detail' ticket.id %}">Ticket #{{ ticket.ticket_number }}: {{ ticket.subject }}</a></h3>
+                <p>Category: {{ ticket.get_category_display }}</p>
+                <p>Priority: {{ ticket.get_priority_display }}</p>
+                <p>Status: {{ ticket.get_status_display }}</p>
+                <p>Created: {{ ticket.created_at }}</p>
+            </div>
+        {% empty %}
+            <p>No tickets found.</p>
+        {% endfor %}
+    </div>
+</body>
+</html>
