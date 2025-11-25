@@ -1,8 +1,8 @@
-# Universal Billing – Open-Source Hotspot Billing System
+# Universal Billing - Open-Source Hotspot Billing System
 
 **Universal Billing** is a full-featured Django-based hotspot billing platform built for Internet Service Providers (ISPs) in Kenya and other emerging markets.
 
-It handles customer subscriptions, **M-Pesa**, vouchers, MikroTik/RADIUS sync, Twilio SMS, support tickets, and analytics — everything needed to run a modern Wi-Fi or fiber hotspot business.
+It handles customer subscriptions, **M-Pesa**, vouchers, MikroTik/RADIUS sync, Twilio SMS, support tickets, and analytics - everything needed to run a modern Wi-Fi or fiber hotspot business.
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![Django](https://img.shields.io/badge/Django-4.2%2B-brightgreen)
@@ -11,7 +11,7 @@ It handles customer subscriptions, **M-Pesa**, vouchers, MikroTik/RADIUS sync, T
 
 ## Author & Maintainer
 **Livingstone Kimani**  
-Email: livingstonkimani@gmail.com
+GitHub: [@Kimsy254](https://github.com/Kimsy254)
 
 ## Features
 
