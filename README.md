@@ -44,7 +44,7 @@ A lot of work remains on the user-facing side:
 | RADIUS (MySQL)                  | Done    | radcheck / radreply                |
 | Voucher generation & redemption | Done    | Bulk + single                      |
 | Twilio SMS notifications       | Done    | Payments, tickets, vouchers        |
-| Support ticket system           | Done    | With attachments                   |
+| Support ticket system           | Almost Done    | With attachments                   |
 | Daily/Monthly sales reports     | Done    | Admin panel + API                  |
 | Swagger API docs                | Done    | `/swagger/`                        |
 
